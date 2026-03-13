@@ -1,0 +1,3 @@
+[submodule "n64js"]
+	path = n64js
+	url = https://github.com/hulkholden/n64js
