@@ -30,7 +30,6 @@ class FunctionMatcher:
         self.db = self._load_db()
 
     def _load_db(self):
-        print(f"Loading function database from {self.db_path}")
         with gzip.open(self.db_path, "rt", encoding="utf-8") as f:
             return json.load(f)
 

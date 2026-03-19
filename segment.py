@@ -212,7 +212,9 @@ def load_segment(seg_num: int, rom_start: int, rom_end: int, should_decompress: 
     compression_type = detect_compression_type(data)
 
     if should_decompress and compression_type == CompressionType.NONE:
-        debug_fail(f"Compression format not supported for segment 0x{seg_num:X}. Header: 0x{data[:4]:08X}")
+        debug_fail(
+            f"Compression format not supported for segment 0x{seg_num:X}. Header: 0x{data[:4]:08X}"
+        )
 
     # Decompress if needed
     if compression_type != CompressionType.NONE:

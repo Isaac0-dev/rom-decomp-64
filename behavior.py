@@ -867,4 +867,3 @@ def parse_behavior(rom_or_addr, sTxt, segmented_addr=None):
     addr = segmented_addr if segmented_addr is not None else rom_or_addr
     name, _ = parse_behavior_script(addr, sTxt)
     return name
-

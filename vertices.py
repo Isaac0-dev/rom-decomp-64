@@ -108,4 +108,3 @@ def parse_vertices(segmented_addr, count, sTxt, context_prefix=None, parent_dl=N
     return get_vertex_processor().parse(
         segmented_addr, count=count, txt=sTxt, context_prefix=context_prefix, parent_dl=parent_dl
     )
-

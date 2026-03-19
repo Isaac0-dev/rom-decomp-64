@@ -186,5 +186,3 @@ def parse_light(segmented_addr, size, sTxt, context_prefix=None):
     return get_light_processor().parse(
         segmented_addr, size=size, txt=sTxt, context_prefix=context_prefix
     )
-
-

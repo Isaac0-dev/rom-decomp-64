@@ -36,13 +36,14 @@ def unscramble_n64(name):
         name[i + 1], name[i + 2] = name[i + 2], name[i + 1]
     return name
 
+
 def unscramble_v64(name):
     for i in range(0, 20, 2):
         name[i], name[i + 1] = name[i + 1], name[i]
     return name
 
 
-def get_internal_name(rom_bytes: bytearray):
+def get_internal_name(rom_bytes: bytes):
     first_byte = rom_bytes[0]
     sjs_name = rom_bytes[0x20:0x34]
 
@@ -54,7 +55,7 @@ def get_internal_name(rom_bytes: bytearray):
     sjs_name = sjs_name[:20]
     sjs_name = bytes(b if b != 0 else 0x20 for b in sjs_name)
 
-    name = sjs_name.decode('shift_jis', errors="ignore")
+    name = sjs_name.decode("shift_jis", errors="ignore")
     if not name:
         name = sjs_name.decode("utf-8", errors="ignore")
 

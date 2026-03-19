@@ -364,7 +364,6 @@ class ExtractionPipeline:
         rom_types = [
             # rom has been extended. It just means no data here.
             # (bytes([0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01]), "M64 ROM extender or Rom Manager"),
-
             # editor hacks
             (bytes([0x80, 0x08, 0x00, 0x00, 0x19, 0x00, 0x00, 0x1C]), "SM64 Editor"),
             (bytes([0x80, 0x08, 0x00, 0x00, 0x0E, 0x00, 0x00, 0xC4]), "SM64 Editor"),
@@ -384,7 +383,9 @@ class ExtractionPipeline:
         self.db.meta.hack_type = hack_type
         self.db.meta.internal_name = internal_name
 
-        print(f"Opened ROM {filename} ({internal_name})\nROM is {'a romhack' if self.db.meta.is_hack else 'vanilla'}")
+        print(
+            f"Opened ROM {filename} ({internal_name})\nROM is {'a romhack' if self.db.meta.is_hack else 'vanilla'}"
+        )
 
         if hack_type != "":
             print(f"ROM was likely built with {hack_type}.")
