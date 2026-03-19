@@ -200,6 +200,9 @@ class GBI1(Microcode):
             vertices_record = vertices.parse_vertices(
                 address, n, dis.sTxt, dis.context_prefix, self.parent_dl
             )
+            if vertices_record is None:
+                debug_print(f"Failed to parse vertices at address {address}")
+                return
             dis.set_cmd(
                 "gsSPVertex",
                 {

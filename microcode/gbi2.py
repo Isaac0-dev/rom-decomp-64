@@ -86,6 +86,9 @@ class GBI2(GBI1):
             vertices_name = vertices.parse_vertices(
                 address, count, dis.sTxt, dis.context_prefix, self.parent_dl
             )
+            if vertices_name is None:
+                debug_print(f"Failed to parse vertices at address {address}")
+                return
             dis.set_cmd(
                 "gsSPVertex",
                 {

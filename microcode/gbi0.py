@@ -1,5 +1,6 @@
 from .gbi1 import GBI1
 import vertices
+from utils import debug_print
 
 
 class GBI0(GBI1):
@@ -36,6 +37,7 @@ class GBI0(GBI1):
                 address, n, dis.sTxt, dis.context_prefix, self.parent_dl
             )
             if vertices_record is None:
+                debug_print(f"Failed to parse vertices at address {address}")
                 return
             dis.set_cmd(
                 "gsSPVertex",
@@ -99,6 +101,9 @@ class F3DEX_GBI0(GBI1):
             vertices_record = vertices.parse_vertices(
                 address, n, dis.sTxt, dis.context_prefix, self.parent_dl
             )
+            if vertices_record is None:
+                debug_print(f"Failed to parse vertices at address {address}")
+                return
             dis.set_cmd(
                 "gsSPVertex",
                 {
