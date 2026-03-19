@@ -149,6 +149,14 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
 
 def register_scroll_target(txt, beh_name, posX, posY, posZ, angleX, angleY, angleZ, behParam):
     global _scroll_counter
+
+    # Update the hack type if it's not set
+    if ctx.db.meta.hack_type == "":
+        if "RM_Scroll_Texture" in beh_name:
+            ctx.db.meta.hack_type = "Rom Manager"
+        elif "editor_Scroll_Texture" in beh_name:
+            ctx.db.meta.hack_type = "SM64 Editor"
+
     posX_s = to_signed16(posX)
     posY_s = to_signed16(posY)
     posZ_s = to_signed16(posZ)

@@ -468,12 +468,11 @@ def extract_sound(rom: Any, txt: Any, output_dir: str, ctl_offset: int, tbl_offs
                 ctl_offset = 0x539920
             if tbl_offset == -1:
                 tbl_offset = 0x54F210
-
-    if ctl_offset == -1 or tbl_offset == -1:
-        debug_fail(
-            f"Couldn't find offsets for sound extraction! (ctl=0x{ctl_offset:X}, tbl=0x{tbl_offset:X})"
-        )
-        return
+        else:
+            debug_print(
+                f"Couldn't find offsets for sound extraction! (ctl=0x{ctl_offset:X}, tbl=0x{tbl_offset:X}) {region}"
+            )
+            return
 
     print(f"Extracting sounds (ctl=0x{ctl_offset:08X}, tbl=0x{tbl_offset:08X})")
 

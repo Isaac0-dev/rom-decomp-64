@@ -227,11 +227,15 @@ class GBI1(Microcode):
         if dis:
             dl_record = dis.parse_dl(address)
 
+            dis.branch_taken = param == G_DL_PUSH  # mark a branch
+
+            if dl_record is None:
+                return
+
             if param == G_DL_PUSH:
                 dis.set_cmd("gsSPDisplayList", {"dl": dl_record})
             else:
                 dis.set_cmd("gsSPBranchList", {"dl": dl_record})
-                dis.branch_taken = True  # Signal that we branched
 
     def execute_load_ucode(self, cmd0, cmd1, dis):
         if dis:

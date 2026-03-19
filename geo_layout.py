@@ -352,8 +352,8 @@ class GeoProcessor(BaseProcessor):
                 cur_indent = next_indent
                 if is_end:
                     found_end = True
-            except Exception:
-                print(f"Error while parsing geo layout at 0x{segmented_addr:08X}")
+            except Exception as e:
+                print(f"Error while parsing geo layout at 0x{segmented_addr:08X} {e}")
                 break
 
         _geo_segment_stack.pop()

@@ -31,9 +31,8 @@ class Microcode(ABC):
 
     def get_handler(self, command):
         opcode = (command >> 24) & 0xFF
-        # debug_print(f"DEBUG: get_handler opcode=0x{opcode:02X} class={self.__class__.__name__} commands_keys={list(self.commands.keys())[:10]}...")
         if opcode not in self.commands:
-            debug_print(f"DEBUG: Unknown opcode 0x{opcode:02X} for {self.__class__.__name__}")
+            debug_print(f"Unknown opcode 0x{opcode:02X} for {self.__class__.__name__}")
         return self.commands.get(opcode, self.execute_unknown)
 
     def register_parent_dl(self, dl_span):

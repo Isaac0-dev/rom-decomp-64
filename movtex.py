@@ -19,6 +19,7 @@ from segment import (
     offset_from_segment_addr,
 )
 from function_matching.mips_utils import MipsInstruction
+from context import ctx
 
 ROTATE_DIRECTION: Dict[int, str] = {
     0: "ROTATE_CLOCKWISE",
@@ -81,6 +82,9 @@ class MovtexExtractor:
         return (seg_num, start, end)
 
     def scan_segment(self, seg_num: int) -> List[MovtexCollection]:
+        if ctx.db.meta.hack_type == "SM64 Editor" or ctx.db.meta.hack_type == "Rom Manager":
+            return []
+
         seg_key = self._segment_cache_key(seg_num)
         if seg_key is not None and seg_key in self._collections:
             return self._collections[seg_key]
