@@ -7,7 +7,7 @@ import disassemble_sound
 from base_processor import BaseProcessor
 from context import ctx
 from rom_database import AudioRecord, AudioSequenceRecord
-from utils import debug_fail, debug_print, find_all_needles_in_haystack, read_int, get_rom
+from utils import debug_print, find_all_needles_in_haystack, read_int, get_rom
 
 
 # Translation map for extended sound bank instrument indices

@@ -11,6 +11,7 @@ from base_processor import BaseProcessor
 from rom_database import CollisionRecord, CommandIR
 from context import ctx
 from constants import SURFACES
+from utils import debug_fail
 
 # --- TERRAIN Opcodes ---
 TERRAIN_LOAD_VERTICES = 0x40
@@ -389,16 +390,17 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
 class CollisionProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
-        self.parsed_collisions: Dict[Tuple[int, int], Any] = {}
 
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[CollisionRecord]:
         context_prefix = kwargs.get("context_prefix")
+        is_behavior = kwargs.get("is_behavior")
         if not segmented_addr:
-            return "NULL"
+            return None
         seg_num = segment_from_addr(segmented_addr)
         segment_info = where_is_segment_loaded(seg_num)
         if segment_info is None:
-            return f"collision_fail_0x{segmented_addr:08X}"
+            debug_fail(f"Segment {seg_num} not loaded for collision at {segmented_addr:08X}")
+            return None
 
         start = segment_info[0]
         db_key = (segmented_addr, start)
@@ -408,35 +410,34 @@ class CollisionProcessor(BaseProcessor):
             return self.ctx.db.collisions[db_key]
 
         offset = offset_from_segment_addr(segmented_addr)
-        key = (offset, start)
-        if key in self.parsed_collisions:
-            return self.parsed_collisions[key]
-
         data = get_segment(seg_num)
         if data is None:
-            return "NULL"
+            debug_fail(
+                f"Segment {seg_num} not loaded while parsing collision at {segmented_addr:08X}"
+            )
+            return None
 
         rom = CustomBytesIO(data)
         rom.seek(offset)
         commands_ir, surface_count = parse_collision_data_to_ir(rom)
 
         name = f"collision_0x{segmented_addr:08X}"
-        if context_prefix is not None:
+        if is_behavior:
+            name = f"collision_bhv_0x{segmented_addr:08X}"
+        elif context_prefix is not None:
             name = f"{context_prefix}_collision_0x{segmented_addr:08X}"
 
-        if self.ctx.db:
-            record = CollisionRecord(
-                seg_addr=segmented_addr,
-                name=name,
-                commands=commands_ir,
-                location=self.ctx.level_area,
-            )
-            self.ctx.db.collisions[db_key] = record
-            self.ctx.db.set_symbol(segmented_addr, name, "Collision")
+        record = CollisionRecord(
+            seg_addr=segmented_addr,
+            name=name,
+            commands=commands_ir,
+            location=self.ctx.level_area,
+        )
+        self.ctx.db.collisions[db_key] = record
+        self.ctx.db.set_symbol(segmented_addr, name, "Collision")
 
-        self.parsed_collisions[key] = record if self.ctx.db else name
         ctx.last_collision_surface_count = surface_count
-        return self.parsed_collisions[key]
+        return self.ctx.db.collisions[db_key]
 
     def serialize(self, record: CollisionRecord) -> str:
         output = f"const Collision {record.name}[] = " + "{\n"
@@ -463,5 +464,9 @@ def parse_collision_data_global(segmented_addr, sTxt):
     return get_collision_processor().parse(segmented_addr, txt=sTxt)
 
 
-def parse_collision(segmented_addr: int, sTxt: Any, context_prefix: Optional[str] = None) -> str:
-    return get_collision_processor().parse(segmented_addr, txt=sTxt, context_prefix=context_prefix)
+def parse_collision(
+    segmented_addr: int, sTxt: Any, context_prefix: Optional[str] = None, is_behavior: bool = False
+) -> str:
+    return get_collision_processor().parse(
+        segmented_addr, txt=sTxt, context_prefix=context_prefix, is_behavior=is_behavior
+    )

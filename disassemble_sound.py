@@ -703,8 +703,6 @@ def main(*Fargs):
         samples_out_dir = args[5]
         banks_out_dir = args[6]
 
-    txt = args[7]
-
     banks = []
 
     if shindou_headers:

@@ -504,13 +504,23 @@ def swap_bytes(value: int) -> int:
 
 
 def segment_from_addr(addr: int) -> int:
-    return addr >> 24
+    seg = addr >> 24
+    offset = addr & 0x00FFFFFF
+    assert seg != offset, (
+        f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}"
+    )
+    return seg
 
 
 def offset_from_segment_addr(addr: int) -> int:
     if addr == -1:
         return -1
-    return addr & 0x00FFFFFF
+    seg = addr >> 24
+    offset = addr & 0x00FFFFFF
+    assert seg != offset, (
+        f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}"
+    )
+    return offset
 
 
 def find_all_needles_in_haystack(haystack: bytes, needle: bytes) -> List[int]:

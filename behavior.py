@@ -91,7 +91,6 @@ def resolve_call_native(vram_addr: int) -> Optional[str]:
 
 
 BEHAVIOR_ADDR_OVERRIDES = {
-    0x13000624: "bhvWFBreakableWallRight",
     0x401700: "RM_Scroll_Texture",
     0x400000: "RM_Scroll_Texture",
     0x402300: "editor_Scroll_Texture",
@@ -589,7 +588,12 @@ def parse_SPAWN_CHILD_WITH_PARAM(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, 
 
 
 def parse_LOAD_COLLISION_DATA(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
-    return CommandIR(0x2A, [f"0x{cmd[1]:08X}"], name="LOAD_COLLISION_DATA"), False
+    from collision import parse_collision
+
+    col_rec = parse_collision(
+        cmd[1], sTxt, context_prefix=ctx.current_context_prefix, is_behavior=True
+    )
+    return CommandIR(0x2A, [col_rec], name="LOAD_COLLISION_DATA"), False
 
 
 def parse_SET_HITBOX_WITH_OFFSET(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
@@ -811,7 +815,8 @@ class BehaviorProcessor(BaseProcessor):
                 commands_ir.append(ir)
                 if is_end:
                     found_end = True
-            except Exception:
+            except Exception as e:
+                debug_fail(f"Failed to parse behavior at 0x{segmented_addr:08x}: {e}")
                 break
 
         prec_hash = structural_hash_behavior(commands_data, script_start=segmented_addr)
