@@ -202,6 +202,11 @@ class LevelScriptProcessor(BaseProcessor):
                 PARSE_STATS["scripts_with_errors"] += 1
             return name
 
+        except Exception as e:
+            debug_print(str(e))
+            _mark_error()
+            raise e
+
         finally:
             ctx.script_cmd_history.pop()
             ctx.level_script_tracker.pop()

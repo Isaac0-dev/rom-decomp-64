@@ -868,8 +868,3 @@ def parse_behavior(rom_or_addr, sTxt, segmented_addr=None):
     name, _ = parse_behavior_script(addr, sTxt)
     return name
 
-
-def __getattr__(name):
-    if name == "parsed_behaviors":
-        return get_behavior_processor().parsed_behaviors
-    raise AttributeError(f"module {__name__} has no attribute {name}")

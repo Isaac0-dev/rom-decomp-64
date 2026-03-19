@@ -400,12 +400,6 @@ def parse_geo_layout(segmented_addr, sTxt, indent=0, context_prefix=None, is_lev
     )
 
 
-def __getattr__(name):
-    if name == "parsed_geos":
-        return get_geo_processor().parsed_geos
-    raise AttributeError(f"module {__name__} has no attribute {name}")
-
-
 # --- Handlers ---
 
 

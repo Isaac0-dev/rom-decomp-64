@@ -523,9 +523,10 @@ class ExtractionPipeline:
                     process.kill()
                     break
 
-                try:
-                    line = io_q.get(timeout=0.1)
-                except queue.Empty:
+                if not io_q.empty():
+                    line = io_q.get()
+                else:
+                    time.sleep(0.1)
                     # No data yet, check if process is still alive
                     if process.poll() is not None:
                         break

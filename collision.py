@@ -461,8 +461,3 @@ def parse_collision_data_global(segmented_addr, sTxt):
 def parse_collision(segmented_addr: int, sTxt: Any, context_prefix: Optional[str] = None) -> str:
     return get_collision_processor().parse(segmented_addr, txt=sTxt, context_prefix=context_prefix)
 
-
-def __getattr__(name):
-    if name == "parsed_collisions":
-        return get_collision_processor().parsed_collisions
-    raise AttributeError(f"module {__name__} has no attribute {name}")

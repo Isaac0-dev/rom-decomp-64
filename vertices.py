@@ -109,8 +109,3 @@ def parse_vertices(segmented_addr, count, sTxt, context_prefix=None, parent_dl=N
         segmented_addr, count=count, txt=sTxt, context_prefix=context_prefix, parent_dl=parent_dl
     )
 
-
-def __getattr__(name):
-    if name == "parsed_vertices":
-        return get_vertex_processor().parsed_vertices
-    raise AttributeError(f"module {__name__} has no attribute {name}")

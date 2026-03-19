@@ -222,12 +222,6 @@ def parse_display_list(addr, txt, context_prefix=None):
     return get_display_list_processor().parse(addr, txt=txt, context_prefix=context_prefix)
 
 
-def __getattr__(name):
-    if name == "parsed_dls":
-        return get_display_list_processor().parsed_dls
-    raise AttributeError(f"module {__name__} has no attribute {name}")
-
-
 def get_display_list_commands(addr):
     p = get_display_list_processor()
     # Note: this returns the most recent one parsed for this address, which is usually correct in current context

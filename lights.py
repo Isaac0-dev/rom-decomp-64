@@ -188,7 +188,3 @@ def parse_light(segmented_addr, size, sTxt, context_prefix=None):
     )
 
 
-def __getattr__(name):
-    if name == "parsed_lights":
-        return get_light_processor().parsed_lights
-    raise AttributeError(f"module {__name__} has no attribute {name}")
