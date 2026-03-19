@@ -10,6 +10,69 @@ from rom_database import AudioRecord, AudioSequenceRecord
 from utils import debug_fail, debug_print, find_all_needles_in_haystack, read_int, get_rom
 
 
+# Translation map for extended sound bank instrument indices
+# LunaBank id -> coop ext bank id
+# thanks to Fearl for the research on this
+INSTRUMENT_MAP = {
+    # 0x00: None, # Accordion -> Broken, no obvious replacement
+    0x01: 0x5C,  # Slap Bass
+    0x02: 0x5E,  # Clavinet or Electric Guitar
+    0x03: 0x25,  # Electric Piano
+    # 0x04: None, # Piano -> Broken, No obvious replacement
+    0x05: 0x03,  # French Horn
+    # 0x06: None, # Pan Flute -> Broken, no obvious replacement
+    0x07: 0x4B,  # Strings
+    0x08: 0x00,  # Nylon Guitar
+    0x09: 0x06,  # Jingle Bells or Sleigh Bells
+    0x0A: 0x05,  # Hi-hats
+    0x0B: 0x11,  # Cymbals
+    0x0C: 0x13,  # Triangle and Cabasa
+    0x0D: 0x14,  # Celesta
+    0x0E: 0x15,  # Banjo
+    0x0F: 0x17,  # Fiddle
+    0x10: 0x19,  # Whistle
+    0x11: 0x1B,  # Acoustic Bass
+    0x12: 0x12,  # Military Snare
+    0x13: 0x23,  # Pizzicato Strings
+    0x14: 0x24,  # Cello or Bassoon
+    0x15: 0x28,  # Voice "Ooh"
+    0x16: 0x64,  # Sitar Drone
+    0x17: 0x29,  # Sitar
+    0x18: 0x57,  # Drum Machine K/S Split
+    0x19: 0x0D,  # Rhodes Bass
+    0x1A: 0x59,  # Percussive Organ
+    0x1B: 0x5A,  # Steel Drum
+    0x1C: 0x2F,  # Brass
+    0x1D: 0x5D,  # Synth Voice
+    0x1E: 0x53,  # Low Cowbell
+    0x1F: 0x2A,  # Charang (Pungi)
+    0x20: 0x65,  # Overdriven Guitar
+    0x21: 0x6A,  # Orchestra Hit
+    0x22: 0x0E,  # Recorder
+    0x23: 0x67,  # Power Drums Kit
+    0x24: 0x54,  # High Cowbell
+    0x25: 0x7B,  # Melodic Tom
+    0x26: 0x1A,  # Steel Guitar or Bright Piano
+    0x27: 0x85,  # "Pah" (Maybe Crash)
+    0x28: 0x4D,  # Snow Accordion
+    0x29: 0x0D,  # Synth Bass broken -> def to Rhodes Bass
+    # 0x2A: None, # Lead Square -> Broken, no obvious replacement
+    0x2B: 0x12,  # Military Snare
+    0x2C: 0x2B,  # Trumpet
+    0x2D: 0x31,  # Timpani
+    0x2E: 0x27,  # Percussion Loop
+    0x2F: 0x20,  # Strings (Low)
+    0x30: 0x3D,  # Xylophone (Music Box)
+    0x31: 0x43,  # Church Organ
+    0x32: 0x51,  # Low Haunting Wind
+    0x7F: 0x7F,  # Percussion
+    0x80: 0x80,  # Saw Wave
+    0x81: 0x81,  # Triangle Wave
+    0x82: 0x82,  # Sine Wave
+    0x83: 0x83,  # Step Wave
+}
+
+
 # Seems like romhacks such as SM74 have a different place to store bank ids
 def check_7f0000_table(rom_bytes: bytes, seq_count: int) -> bool:
     try:
@@ -303,6 +366,23 @@ class AudioProcessor(BaseProcessor):
             bank_id = get_bank_id(rom_bytes, bank_source, i)
             volume = 75
             seq_name = f"seq_{i:02X}"
+
+            # Translate ext instruments
+            if bank_id == 0x0C:
+                mut_data = bytearray(data)
+                j = 0
+                while j < len(mut_data) - 1:
+                    # 0xC1 = CMD_INSTRUMENT in Seq64 (used for Program Change)
+                    if mut_data[j] == 0xC1:
+                        inst = mut_data[j + 1]
+                        if inst in INSTRUMENT_MAP:
+                            mut_data[j + 1] = INSTRUMENT_MAP[inst]
+                            # Assume standard 2-byte usage of 0xC1, skip the payload
+                            j += 1
+                    j += 1
+                data = mut_data
+                bank_id = 0x2A
+
             lua_lines.append(
                 f"smlua_audio_utils_replace_sequence("
                 f"0x{i:02X}, 0x{bank_id:02X}, {volume}, '{seq_name}')\n"
