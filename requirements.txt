@@ -1,0 +1,6 @@
+pypng==0.0.20
+Pillow>=9.0.0
+sv-ttk>=2.5.5
+tkinterdnd2>=0.4.3
+requests
+bps

@@ -1,0 +1,102 @@
+name: Build Nuitka Standalone
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build Linux (Nuitka)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        pip install nuitka ordered-set zstandard xxhash
+        pip install -r requirements.txt || true
+
+    - name: Validate Python syntax
+      run: |
+        python -c "import compileall, sys; sys.exit(0 if compileall.compile_dir('.', force=True, quiet=1) else 1)"
+
+    - name: Build shared library (librnc.so)
+      run: |
+        gcc -shared -O3 -fPIC compression/rnc_decode.c -o compression/librnc.so
+
+    - name: Build aifc_decode helper (Linux)
+      run: |
+        gcc -O2 aifc_decode.c -o aifc_decode
+
+    - name: Build Nuitka binary
+      run: |
+        python -m nuitka gui_extract.py --mode=onefile \
+          --include-data-file=compression/librnc.so=compression/librnc.so \
+          --include-data-file=aifc_decode=aifc_decode \
+          --enable-plugin=tk-inter \
+          --warn-implicit-exceptions --warn-unusual-code \
+          --output-filename=rom-decomp-64
+
+    - name: Upload artifact (Linux build)
+      uses: actions/upload-artifact@v4
+      with:
+        name: rom-decomp-64-linux
+        path: rom-decomp-64
+
+  build-windows:
+    name: Build Windows (Nuitka)
+    runs-on: windows-latest
+
+    steps:
+    - name: Check out repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies (Windows)
+      run: |
+        pip install nuitka ordered-set zstandard xxhash
+        pip install -r requirements.txt || true
+
+    - name: Validate Python syntax
+      run: |
+        python -c "import compileall, sys; sys.exit(0 if compileall.compile_dir('.', force=True, quiet=1) else 1)"
+
+    - name: Build Windows DLL (librnc.dll)
+      run: |
+        gcc -shared -O3 -fPIC compression/rnc_decode.c -o compression/librnc.dll
+      shell: bash
+
+    - name: Build aifc_decode helper (Windows)
+      run: |
+        gcc -O2 aifc_decode.c -o aifc_decode.exe
+      shell: bash
+
+    - name: Build Nuitka Windows binary
+      shell: bash
+      run: |
+        python -m nuitka extract.py --mode=onefile \
+          --include-data-file=compression/librnc.dll=compression/librnc.dll \
+          --include-data-file=aifc_decode.exe=aifc_decode.exe \
+          --enable-plugin=tk-inter \
+          --warn-implicit-exceptions --warn-unusual-code \
+          --windows-disable-console \
+          --output-filename=rom-decomp-64.exe
+
+    - name: Upload artifact (Windows build)
+      uses: actions/upload-artifact@v4
+      with:
+        name: rom-decomp-64-windows
+        path: rom-decomp-64.exe
