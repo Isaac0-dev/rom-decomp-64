@@ -82,6 +82,8 @@ class ExtractionPipeline:
         # self.pass_refine_models()
         # self.pass_refine_warps()
 
+        self.pass_optimization()
+
         self.pass_serialize()
 
         return self.pass_finalize()
@@ -181,9 +183,9 @@ class ExtractionPipeline:
         from level_script import get_level_processor
         from macro_objects import get_macro_processor
         from collections import defaultdict
-
-        print("Serializing structured IR to final C code using processors...")
         import sys
+
+        print("Writing files to output directory...")
 
         sys.stdout.flush()
 
@@ -785,6 +787,81 @@ class ExtractionPipeline:
             if seg_num not in (1, 7):
                 debug_print(f"Scanning segment 0x{seg_num:02X} for trajectories...")
                 scan_for_trajectories(seg_num, self.txt)
+
+    # ------------------------------------------------------------------
+    # Optimization passes
+    # ------------------------------------------------------------------
+
+    def pass_optimization(self) -> None:
+        """
+        Run optimization passes on the database.
+        """
+        from optimization_passes import run_model_optimization_passes
+        from utils import debug_print
+
+        if not self.db:
+            return
+        debug_print("=== Optimization Passes ===")
+
+        # Optimize models
+        run_model_optimization_passes(self.db)
+
+        # Optimize level scripts
+
+        # Identify all scripts that are actually referenced by a command
+        referenced_scripts = set()
+        for s in self.db.level_scripts.values():
+            for cmd in s.commands:
+                for param in cmd.params:
+                    # Check if the parameter is a reference to another LevelRecord
+                    if hasattr(param, "script_addr"):
+                        referenced_scripts.add(param.script_addr)
+        for addr, script in list(self.db.level_scripts.items()):
+
+            # Skip over non-master scripts, and prune unreferenced ones
+            if not (script.name.startswith("level_") and script.name.endswith("_entry")):
+                if addr not in referenced_scripts:
+                    self.db.level_scripts.pop(addr)
+                continue
+
+            # skip if this script was already inlined into another script in this pass
+            if addr not in self.db.level_scripts:
+                continue
+
+            in_area_block = False
+            i = 0
+            while i < len(script.commands):
+                cmd = script.commands[i]
+
+                # Remove NOPs
+                if cmd.name == "SKIP_NOP" or cmd.name == "NOP":
+                    cmd.comment = "// "
+
+                if cmd.name == "AREA":
+                    in_area_block = True
+                if cmd.name == "END_AREA":
+                    in_area_block = False
+
+                # Expand jump links only inside AREA blocks
+                if cmd.name == "JUMP_LINK" and in_area_block:
+                    level_script = cmd.params[0]
+
+                    # Ensure we have a valid record with commands to expand
+                    if hasattr(level_script, "commands"):
+                        level_script_cmds = level_script.commands[0:-1]  # skip return
+
+                        # copy indentation across
+                        for command in level_script_cmds:
+                            command.indent = cmd.indent
+                        script.commands[i : i + 1] = level_script_cmds
+
+                        # remove the original level script from the database
+                        self.db.level_scripts.pop(level_script.script_addr, None)
+
+                        # Do not increment i; re-process the new commands at this position
+                        continue
+
+                i += 1
 
     # ------------------------------------------------------------------
     # Refinement Pass A: Behavior resolution
