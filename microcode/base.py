@@ -19,6 +19,8 @@ from texture import (
     set_tile_format,
     set_tile_size,
 )
+from context import LevelAreaContext
+from rom_database import CommandIR, RomDatabase
 
 
 class Microcode(ABC):
@@ -38,9 +40,8 @@ class Microcode(ABC):
         self.parent_dl = dl_span
 
     def execute_unknown(self, cmd0, cmd1, dis):
-        opcode = (cmd0 >> 24) & 0xFF
         if dis:
-            dis.text(f"// Unknown command 0x{opcode:02X}: {cmd0:08X} {cmd1:08X}")
+            dis.set_cmd("UnknownGfx", {}, commented_out=True)
         return None
 
     def _SHIFTR(self, val, shift, size):
@@ -56,6 +57,60 @@ class Microcode(ABC):
             return text
         return f"// {text}"
 
+    def serialize_command(self, cmd: CommandIR, db: RomDatabase, location: LevelAreaContext) -> str:
+        """Serialize a CommandIR using microcode-specific logic."""
+        # Follow the same pattern as execution: serialize_<name>
+        if not cmd.name:
+            return f"    // Unknown Gfx 0x{cmd.opcode:02X}"
+        gfx_cmd = cmd.params[0]
+
+        from rom_database import VertexRecord, TextureRecord, LightRecord, DisplayListRecord
+
+        c = "// " if gfx_cmd.commented_out else ""
+
+        if cmd.name == "gsSP4Triangles":
+            # we need to convert this into 2 gsSP2Triangles commands
+            # because gsSP4Triangles doesn't exist in coop
+            tris = gfx_cmd.params.get("tris", [])
+            cmd1 = tris[:-2]
+            cmd2 = tris[2:]
+
+            def i2p(indices):
+                return ", ".join([str(i) for i in indices])[:-2]
+
+            return f"    {c}gsSP2Triangles({i2p(cmd1)})\n    {c}gsSP2Triangles({i2p(cmd2)})"
+        if cmd.name == "gsSPLight":
+            from lights import vb_type_name_to_extension
+
+            params = gfx_cmd.params
+            light = params.get("light")
+            idx = params.get("idx")
+            ext = vb_type_name_to_extension(light.type_name, idx - 1)
+
+            return f"    {c}gsSPLight(/* light */ &{light.name}{ext}, /* idx */ {idx})"
+        else:
+            params_str = ""
+            for k, v in gfx_cmd.params.items():
+                if (
+                    isinstance(v, VertexRecord)
+                    or isinstance(v, TextureRecord)
+                    or isinstance(v, LightRecord)
+                    or isinstance(v, DisplayListRecord)
+                ):
+                    params_str += f"/* {k} */ {v.name}, "
+                elif isinstance(v, str):
+                    params_str += f"/* {k} */ {v}, "
+                elif isinstance(v, int):
+                    params_str += f"/* {k} */ 0x{v:X}, "
+                else:
+                    raise Exception(
+                        f"While looking at {cmd.name} found unknown parameter type {type(v)} for {k} ... {v}"
+                    )
+
+        params_str = params_str[:-2]
+
+        return f"    {c}{cmd.name}({params_str})"
+
     # Common RDP Commands
     def execute_dp_set_texture_image(self, cmd0, cmd1, dis):
         fmt_val = self._SHIFTR(cmd0, 21, 3)
@@ -67,20 +122,18 @@ class Microcode(ABC):
         siz = G_IM_SIZ_MAP.get(siz_val, str(siz_val))
 
         if dis:
-            texture_name = set_texture_image(
+            texture_record = set_texture_image(
                 texture_addr, fmt_val, siz_val, width, dis.context_prefix
             )
             dis.set_cmd(
                 "gsDPSetTextureImage",
-                {"fmt": fmt_val, "siz": siz_val, "width": width, "w0": cmd0, "w1": cmd1},
+                {
+                    "fmt": fmt,
+                    "siz": siz,
+                    "width": width,
+                    "texture_record": texture_record,
+                },
             )
-            params = [
-                f"/* fmt */ {fmt}",
-                f"/* siz */ {siz}",
-                f"/* width */ {width}",
-                f"/* texture */ {texture_name}",
-            ]
-            dis.text(f"gsDPSetTextureImage({self.format_params(params)})")
 
     def execute_dp_set_tile(self, cmd0, cmd1, dis):
         fmt_val = self._SHIFTR(cmd0, 21, 3)
@@ -118,23 +171,20 @@ class Microcode(ABC):
             dis.set_cmd(
                 "gsDPSetTile",
                 {
-                    "fmt": fmt_val,
-                    "siz": siz_val,
-                    "tile": tile_val,
+                    "fmt": fmt,
+                    "siz": siz,
+                    "line": line,
+                    "tile": tile,
                     "tmem": tmem,
                     "palette": palette,
-                    "cmt": cmt_val,
+                    "cmt": cmt,
                     "maskt": maskt,
                     "shiftt": shiftt,
-                    "cms": cms_val,
+                    "cms": cms,
                     "masks": masks,
                     "shifts": shifts,
-                    "w0": cmd0,
-                    "w1": cmd1,
                 },
             )
-            params = [fmt, siz, line, tmem, tile, palette, cmt, maskt, shiftt, cms, masks, shifts]
-            dis.text(f"gsDPSetTile({self.format_params(params)})")
 
     def execute_dp_load_block(self, cmd0, cmd1, dis):
         uls = self._SHIFTR(cmd0, 12, 12)
@@ -150,22 +200,17 @@ class Microcode(ABC):
             dis.set_cmd(
                 "gsDPLoadBlock",
                 {
-                    "tile": tile_val,
+                    "tile": tile,
                     "uls": uls,
                     "ult": ult,
                     "lrs": lrs,
                     "dxt": dxt,
-                    "w0": cmd0,
-                    "w1": cmd1,
                 },
             )
-            params = [tile, uls, ult, lrs, dxt]
-            dis.text(f"gsDPLoadBlock({self.format_params(params)})")
 
     def execute_dp_pipe_sync(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPPipeSync", {"w0": cmd0, "w1": cmd1})
-            dis.text("gsDPPipeSync()")
+            dis.set_cmd("gsDPPipeSync", {})
 
     def execute_dp_set_combine_mode(self, cmd0, cmd1, dis):
         # Cycle 0
@@ -197,12 +242,16 @@ class Microcode(ABC):
         cm2 = G_SETCOMBINE_MODES.get(cycle2)
 
         if dis:
-            dis.set_cmd("gsDPSetCombineMode", {"modes": [cycle1, cycle2], "w0": cmd0, "w1": cmd1})
-
             if cm1 and cm2:
-                dis.text(f"gsDPSetCombineMode({cm1}, {cm2})")
+                dis.set_cmd(
+                    "gsDPSetCombineMode",
+                    {"cycle1": cm1, "cycle2": cm2},
+                )
             else:
-                dis.text(f"gsDPSetCombineLERP({cycle1}, {cycle2})")
+                dis.set_cmd(
+                    "gsDPSetCombineLERP",
+                    {"cycle1": cycle1, "cycle2": cycle2},
+                )
 
     def execute_dp_fill_rectangle(self, cmd0, cmd1, dis):
         ulx = self._SHIFTR(cmd1, 14, 10)
@@ -210,14 +259,15 @@ class Microcode(ABC):
         lrx = self._SHIFTR(cmd0, 14, 10)
         lry = self._SHIFTR(cmd0, 2, 10)
         if dis:
-            dis.set_cmd("gsDPFillRectangle", {"w0": cmd0, "w1": cmd1})
-            params = [ulx, uly, lrx, lry]
-            dis.text(self.comment_out(f"gsDPFillRectangle({self.format_params(params)})"))
+            dis.set_cmd(
+                "gsDPFillRectangle",
+                {"ulx": ulx, "uly": uly, "lrx": lrx, "lry": lry},
+                commented_out=True,
+            )
 
     def execute_dp_set_fill_color(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPSetFillColor", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gsDPSetFillColor(0x{cmd1:08X})")
+            dis.set_cmd("gsDPSetFillColor", {"d": cmd1}, commented_out=True)
 
     def execute_dp_set_scissor(self, cmd0, cmd1, dis):
         ulx = self._SHIFTR(cmd1, 12, 12)
@@ -229,9 +279,9 @@ class Microcode(ABC):
         mode = G_SC_MAP.get(mode_val, str(mode_val))
 
         if dis:
-            dis.set_cmd("gsDPSetScissor", {"w0": cmd0, "w1": cmd1})
-            params = [mode, ulx, uly, lrx, lry]
-            dis.text(f"gsDPSetScissor({self.format_params(params)})")
+            dis.set_cmd(
+                "gsDPSetScissor", {"mode": mode, "ulx": ulx, "uly": uly, "lrx": lrx, "lry": lry}
+            )
 
     def execute_dp_set_fog_color(self, cmd0, cmd1, dis):
         r = self._SHIFTR(cmd1, 24, 8)
@@ -239,9 +289,7 @@ class Microcode(ABC):
         b = self._SHIFTR(cmd1, 8, 8)
         a = self._SHIFTR(cmd1, 0, 8)
         if dis:
-            dis.set_cmd("gsDPSetFogColor", {"w0": cmd0, "w1": cmd1})
-            params = [r, g, b, a]
-            dis.text(f"gsDPSetFogColor({self.format_params(params)})")
+            dis.set_cmd("gsDPSetFogColor", {"r": r, "g": g, "b": b, "a": a})
 
     def execute_dp_set_tile_size(self, cmd0, cmd1, dis):
         uls = self._SHIFTR(cmd0, 12, 12)
@@ -249,11 +297,13 @@ class Microcode(ABC):
         tile = self._SHIFTR(cmd1, 24, 3)
         lrs = self._SHIFTR(cmd1, 12, 12)
         lrt = self._SHIFTR(cmd1, 0, 12)
+        tile_name = G_TX_MAP.get(tile, str(tile))
         if dis:
             set_tile_size(tile, uls, ult, lrs, lrt)
-            dis.set_cmd("gsDPSetTileSize", {"w0": cmd0, "w1": cmd1, "modes": [uls, ult, lrs, lrt]})
-            params = [tile, uls, ult, lrs, lrt]
-            dis.text(f"gsDPSetTileSize({self.format_params(params)})")
+            dis.set_cmd(
+                "gsDPSetTileSize",
+                {"tile": tile_name, "uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt},
+            )
 
     def execute_dp_load_tile(self, cmd0, cmd1, dis):
         uls = self._SHIFTR(cmd0, 12, 12)
@@ -261,23 +311,22 @@ class Microcode(ABC):
         tile_val = self._SHIFTR(cmd1, 24, 3)
         lrs = self._SHIFTR(cmd1, 12, 12)
         lrt = self._SHIFTR(cmd1, 0, 12)
-        tile = G_TX_MAP.get(tile_val, str(tile_val))
+        tile_name = G_TX_MAP.get(tile_val, str(tile_val))
         if dis:
             load_tile(dis.sTxt, dis.current_pos, tile_val, uls, ult, lrs, lrt)
-            dis.set_cmd("gsDPLoadTile", {"w0": cmd0, "w1": cmd1})
-            params = [tile, uls, ult, lrs, lrt]
-            dis.text(f"gsDPLoadTile({self.format_params(params)})")
+            dis.set_cmd(
+                "gsDPLoadTile",
+                {"tile": tile_name, "uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt},
+            )
 
     def execute_dp_load_tlut(self, cmd0, cmd1, dis):
         tile_val = self._SHIFTR(cmd1, 24, 3)
         count = self._SHIFTR(cmd1, 14, 10)
-        tile = G_TX_MAP.get(tile_val, str(tile_val))
+        tile_name = G_TX_MAP.get(tile_val, str(tile_val))
         if dis:
             real_count = count + 1
             load_tlut(dis.sTxt, real_count, 0, None)
-            dis.set_cmd("gsDPLoadTLUT", {"w0": cmd0, "w1": cmd1})
-            params = [tile, count]
-            dis.text(f"// gsDPLoadTLUT_cmd({self.format_params(params)})")
+            dis.set_cmd("gsDPLoadTLUT", {"tile": tile_name, "count": count}, commented_out=True)
 
     def execute_dp_set_env_color(self, cmd0, cmd1, dis):
         r = self._SHIFTR(cmd1, 24, 8)
@@ -285,9 +334,7 @@ class Microcode(ABC):
         b = self._SHIFTR(cmd1, 8, 8)
         a = self._SHIFTR(cmd1, 0, 8)
         if dis:
-            dis.set_cmd("gsDPSetEnvColor", {"w0": cmd0, "w1": cmd1})
-            params = [r, g, b, a]
-            dis.text(f"gsDPSetEnvColor({self.format_params(params)})")
+            dis.set_cmd("gsDPSetEnvColor", {"r": r, "g": g, "b": b, "a": a})
 
     def execute_dp_set_prim_color(self, cmd0, cmd1, dis):
         m = self._SHIFTR(cmd0, 8, 8)
@@ -297,9 +344,7 @@ class Microcode(ABC):
         b = self._SHIFTR(cmd1, 8, 8)
         a = self._SHIFTR(cmd1, 0, 8)
         if dis:
-            dis.set_cmd("gsDPSetPrimColor", {"w0": cmd0, "w1": cmd1})
-            params = [m, l_val, r, g, b, a]
-            dis.text(f"gsDPSetPrimColor({self.format_params(params)})")
+            dis.set_cmd("gsDPSetPrimColor", {"m": m, "l": l_val, "r": r, "g": g, "b": b, "a": a})
 
     def execute_dp_set_blend_color(self, cmd0, cmd1, dis):
         r = self._SHIFTR(cmd1, 24, 8)
@@ -307,9 +352,7 @@ class Microcode(ABC):
         b = self._SHIFTR(cmd1, 8, 8)
         a = self._SHIFTR(cmd1, 0, 8)
         if dis:
-            dis.set_cmd("gsDPSetBlendColor", {"w0": cmd0, "w1": cmd1})
-            params = [r, g, b, a]
-            dis.text(f"gsDPSetBlendColor({self.format_params(params)})")
+            dis.set_cmd("gsDPSetBlendColor", {"r": r, "g": g, "b": b, "a": a})
 
     def execute_dp_set_color_image(self, cmd0, cmd1, dis):
         fmt = self._SHIFTR(cmd0, 21, 3)
@@ -317,29 +360,23 @@ class Microcode(ABC):
         width = self._SHIFTR(cmd0, 0, 12) + 1
         img = cmd1
         if dis:
-            dis.set_cmd("gsDPSetColorImage", {"w0": cmd0, "w1": cmd1})
-            params = [fmt, siz, width, f"0x{img:08X}"]
-            dis.text(f"gsDPSetColorImage({self.format_params(params)})")
+            dis.set_cmd("gsDPSetColorImage", {"fmt": fmt, "siz": siz, "width": width, "image": img})
 
     def execute_dp_set_depth_image(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPSetDepthImage", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gsDPSetDepthImage(0x{cmd1:08X})")
+            dis.set_cmd("gsDPSetDepthImage", {}, commented_out=True)
 
     def execute_dp_load_sync(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPLoadSync", {"w0": cmd0, "w1": cmd1})
-            dis.text("gsDPLoadSync()")
+            dis.set_cmd("gsDPLoadSync", {})
 
     def execute_dp_tile_sync(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPTileSync", {"w0": cmd0, "w1": cmd1})
-            dis.text("gsDPTileSync()")
+            dis.set_cmd("gsDPTileSync", {})
 
     def execute_dp_full_sync(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPFullSync", {"w0": cmd0, "w1": cmd1})
-            dis.text("gsDPFullSync()")
+            dis.set_cmd("gsDPFullSync", {})
 
     def execute_dp_texture_rectangle(self, cmd0, cmd1, dis):
         self._execute_dp_tex_rect(cmd0, cmd1, dis, flip=False)
@@ -355,16 +392,17 @@ class Microcode(ABC):
         lrt = self._SHIFTR(cmd1, 0, 12)
         fn = "gsDPTextureRectangleFlip" if flip else "gsDPTextureRectangle"
         if dis:
-            dis.set_cmd(fn, {"w0": cmd0, "w1": cmd1})
-            params = [uls, ult, lrs, lrt, tile, 0, 0, 0, 0]
-            dis.text(self.comment_out(f"{fn}({self.format_params(params)})"))
+            dis.set_cmd(
+                fn,
+                {"uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt, "tile": tile, "sft": 0, "tft": 0},
+                commented_out=True,
+            )
 
     def execute_dp_set_prim_depth(self, cmd0, cmd1, dis):
         z = self._SHIFTR(cmd0, 0, 16)
         dz = self._SHIFTR(cmd1, 0, 16)
         if dis:
-            dis.set_cmd("gsDPSetPrimDepth", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"gsDPSetPrimDepth({z}, {dz})")
+            dis.set_cmd("gsDPSetPrimDepth", {"z": z, "dz": dz})
 
     def execute_dp_set_convert(self, cmd0, cmd1, dis):
         k0 = self._SHIFTR(cmd0, 13, 9)
@@ -374,9 +412,9 @@ class Microcode(ABC):
         k4 = self._SHIFTR(cmd1, 9, 9)
         k5 = self._SHIFTR(cmd1, 0, 9)
         if dis:
-            dis.set_cmd("gsDPSetConvert", {"w0": cmd0, "w1": cmd1})
-            params = [k0, k1, k2, k3, k4, k5]
-            dis.text(f"gsDPSetConvert({self.format_params(params)})")
+            dis.set_cmd(
+                "gsDPSetConvert", {"k0": k0, "k1": k1, "k2": k2, "k3": k3, "k4": k4, "k5": k5}
+            )
 
     def execute_dp_set_key_gb(self, cmd0, cmd1, dis):
         cG = self._SHIFTR(cmd0, 8, 8)
@@ -386,15 +424,13 @@ class Microcode(ABC):
         sB = self._SHIFTR(cmd1, 8, 8)
         wB = self._SHIFTR(cmd1, 0, 8)
         if dis:
-            dis.set_cmd("gsDPSetKeyGB", {"w0": cmd0, "w1": cmd1})
-            params = [cG, sG, wG, cB, sB, wB]
-            dis.text(f"gsDPSetKeyGB({self.format_params(params)})")
+            dis.set_cmd(
+                "gsDPSetKeyGB", {"cG": cG, "sG": sG, "wG": wG, "cB": cB, "sB": sB, "wB": wB}
+            )
 
     def execute_dp_set_key_r(self, cmd0, cmd1, dis):
         cR = self._SHIFTR(cmd0, 8, 8)
         sR = self._SHIFTR(cmd0, 0, 8)
         wR = self._SHIFTR(cmd1, 8, 8)
         if dis:
-            dis.set_cmd("gsDPSetKeyR", {"w0": cmd0, "w1": cmd1})
-            params = [cR, sR, wR]
-            dis.text(f"gsDPSetKeyR({self.format_params(params)})")
+            dis.set_cmd("gsDPSetKeyR", {"cR": cR, "sR": sR, "wR": wR})

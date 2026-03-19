@@ -1,5 +1,6 @@
 from typing import List
 from rom_database import CommandIR, RomDatabase
+from context import LevelAreaContext
 
 # Mapping of opcodes to formatting functions for Geo Layouts
 GEO_OPCODE_NAMES = {
@@ -49,7 +50,7 @@ def serialize_geo_command(cmd: CommandIR, db: RomDatabase) -> str:
         if isinstance(func, str):
             func_name = func
         else:
-            func_name = db.resolve_symbol(func, "NULL") if db else "NULL"
+            func_name = db.resolve_symbol(func, "func")
         comment = "// " if func_name == "NULL" else ""
         return f"{indent_str}{comment}GEO_SWITCH_CASE({count}, {func_name})"
 
@@ -58,7 +59,7 @@ def serialize_geo_command(cmd: CommandIR, db: RomDatabase) -> str:
         if isinstance(func, str):
             func_name = func
         else:
-            func_name = db.resolve_symbol(func, "NULL") if db else "NULL"
+            func_name = db.resolve_symbol(func, "func")
         comment = "// " if func_name == "NULL" else ""
         return f"{indent_str}{comment}GEO_ASM({param}, {func_name})"
 
@@ -68,17 +69,19 @@ def serialize_geo_command(cmd: CommandIR, db: RomDatabase) -> str:
             if isinstance(func, str):
                 func_name = func
             else:
-                func_name = db.resolve_symbol(func, "NULL") if db else "NULL"
+                func_name = db.resolve_symbol(func, "func")
             return f"{indent_str}GEO_CAMERA_FRUSTUM_WITH_FUNC({fov}, {near}, {far}, {func_name})"
         fov, near, far = cmd.params
         return f"{indent_str}GEO_CAMERA_FRUSTUM({fov}, {near}, {far})"
 
     if cmd.opcode == 0x15:  # GEO_DISPLAY_LIST
         layer, dl = cmd.params
-        if isinstance(dl, str):
+        if hasattr(dl, "name"):
+            dl_name = dl.name
+        elif isinstance(dl, str):
             dl_name = dl
         else:
-            dl_name = db.resolve_symbol(dl, f"dl_{dl:08X}") if db else f"0x{dl:08X}"
+            dl_name = db.resolve_symbol(dl, "dl")
         return f"{indent_str}GEO_DISPLAY_LIST({layer}, {dl_name})"
 
     # Fallback: simple comma-separated params
@@ -234,7 +237,7 @@ def serialize_behavior_command(cmd: CommandIR, db: RomDatabase) -> str:
     # Special handling for symbol resolution
     if cmd.opcode == 0x0C:  # CALL_NATIVE
         vram_addr = cmd.params[0]
-        func_name = db.resolve_symbol(vram_addr, "NULL") if db else f"0x{vram_addr:08X}"
+        func_name = db.resolve_symbol(vram_addr, "func")
         return f"{indent_str}CALL_NATIVE({func_name})"
 
     if cmd.opcode in [
@@ -250,7 +253,7 @@ def serialize_behavior_command(cmd: CommandIR, db: RomDatabase) -> str:
         resolved_params = []
         for p in cmd.params:
             if isinstance(p, int) and p > 0x1000000:
-                resolved_params.append(db.resolve_symbol(p, f"0x{p:08X}") if db else f"0x{p:08X}")
+                resolved_params.append(db.resolve_symbol(p, "ptr"))
             else:
                 resolved_params.append(str(p))
         return f"{indent_str}{name}({', '.join(resolved_params)})"
@@ -266,3 +269,38 @@ def serialize_behavior(bhv_name: str, commands: List[CommandIR], db: RomDatabase
         lines.append(serialize_behavior_command(cmd, db) + ",")
     lines.append("};")
     return "\n".join(lines)
+
+
+def serialize_gfx_command(
+    cmd: CommandIR, db: RomDatabase, location: LevelAreaContext, microcode_name: str = "GBI0"
+) -> str:
+    """Convert a Gfx (Display List) CommandIR back into a C macro string."""
+    from microcode import create_microcode
+
+    ucode = create_microcode(microcode_name)
+    return ucode.serialize_command(cmd, db, location)
+
+
+def serialize_gfx_layout(
+    dl_name: str,
+    commands: List[CommandIR],
+    db: RomDatabase,
+    location: LevelAreaContext,
+    microcode_name: str = "GBI0",
+) -> str:
+    """Serialize a full DisplayListRecord into a C file string."""
+    lines = [f"const Gfx {dl_name}[] = {{"]
+    for cmd in commands:
+        lines.append(serialize_gfx_command(cmd, db, location, microcode_name) + ",")
+    lines.append("};")
+    return "\n".join(lines)
+
+
+G_IM_FMT_INV = {
+    0: "G_IM_FMT_RGBA",
+    1: "G_IM_FMT_YUV",
+    2: "G_IM_FMT_CI",
+    3: "G_IM_FMT_IA",
+    4: "G_IM_FMT_I",
+}
+G_IM_SIZ_INV = {0: "G_IM_SIZ_4b", 1: "G_IM_SIZ_8b", 2: "G_IM_SIZ_16b", 3: "G_IM_SIZ_32b"}

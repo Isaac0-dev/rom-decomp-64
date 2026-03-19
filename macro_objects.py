@@ -73,14 +73,14 @@ class MacroObjectProcessor(BaseProcessor):
     serialize() — generates C text from the stored entries, writes via txt.
     """
 
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[MacroRecord]:
         context_prefix: str = kwargs.get("context_prefix") or ""
 
         try:
             segmented_to_virtual(segmented_addr)
         except Exception as e:
             debug_fail(f"Failed to convert macro object address 0x{segmented_addr:08x}: {e}")
-            return "NULL"
+            return None
 
         seg_num = segment_from_addr(segmented_addr)
         data = get_segment(seg_num)
@@ -89,7 +89,7 @@ class MacroObjectProcessor(BaseProcessor):
             debug_fail(
                 f"Failed to load segment {seg_num} for macro objects at 0x{segmented_addr:08x}"
             )
-            return "NULL"
+            return None
 
         offset = offset_from_segment_addr(segmented_addr)
 
@@ -97,7 +97,7 @@ class MacroObjectProcessor(BaseProcessor):
             debug_fail(
                 f"Macro object offset 0x{offset:x} is beyond segment data (size 0x{len(data):x})"
             )
-            return "NULL"
+            return None
 
         entries: List[Tuple[int, int, int, int, int, int]] = []
         pos = offset
@@ -121,18 +121,23 @@ class MacroObjectProcessor(BaseProcessor):
 
         macro_list_name = f"{context_prefix}_macro_objs" if context_prefix else "macro_objs"
 
-        if self.db is not None:
-            segment_info = where_is_segment_loaded(seg_num)
-            if segment_info is not None:
-                start, _ = segment_info
-                self.db.macros[(segmented_addr, start)] = MacroRecord(
-                    addr=segmented_addr,
-                    name=macro_list_name,
-                    context_prefix=context_prefix,
-                    entries=entries,
-                )
+        segment_info = where_is_segment_loaded(seg_num)
+        if segment_info is None:
+            debug_fail(
+                f"Failed to find segment {seg_num} for macro objects at 0x{segmented_addr:08x}"
+            )
+            return None
 
-        return macro_list_name
+        start, _ = segment_info
+        record = MacroRecord(
+            addr=segmented_addr,
+            name=macro_list_name,
+            context_prefix=context_prefix,
+            entries=entries,
+            location=self.ctx.level_area,
+        )
+        self.db.macros[(segmented_addr, start)] = record
+        return record
 
     def serialize(self, record: MacroRecord) -> str:
         """Generate C text from the stored entries and write to output."""
@@ -155,7 +160,7 @@ def get_macro_processor() -> MacroObjectProcessor:
 
 def parse_macro_object_list(
     segmented_addr: int, txt: Any, context_prefix: Optional[str] = None
-) -> str:
+) -> Optional[MacroRecord]:
     """Thin shim: delegates to MacroObjectProcessor.parse()."""
     mp = get_macro_processor()
     old_txt = mp.ctx.txt

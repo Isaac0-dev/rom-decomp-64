@@ -82,6 +82,9 @@ class ExtractionPipeline:
         # self.pass_refine_models()
         # self.pass_refine_warps()
 
+        # Analysis passes — cross-reference and score records
+        self.pass_analysis()
+
         self.pass_optimization()
 
         self.pass_serialize()
@@ -789,6 +792,23 @@ class ExtractionPipeline:
                 scan_for_trajectories(seg_num, self.txt)
 
     # ------------------------------------------------------------------
+    # Analysis passes (db_passes)
+    # ------------------------------------------------------------------
+
+    def pass_analysis(self) -> None:
+        """
+        Run database-driven analysis passes that cross-reference records
+        to improve confidence, naming, and vanilla detection.
+        """
+        from db_passes import run_all_analysis_passes
+        from utils import debug_print
+
+        if not self.db:
+            return
+        debug_print("=== Analysis Passes ===")
+        run_all_analysis_passes(self.db)
+
+    # ------------------------------------------------------------------
     # Optimization passes
     # ------------------------------------------------------------------
 
@@ -817,7 +837,6 @@ class ExtractionPipeline:
                     if hasattr(param, "script_addr"):
                         referenced_scripts.add(param.script_addr)
         for addr, script in list(self.db.level_scripts.items()):
-
             # Skip over non-master scripts, and prune unreferenced ones
             if not (script.name.startswith("level_") and script.name.endswith("_entry")):
                 if addr not in referenced_scripts:

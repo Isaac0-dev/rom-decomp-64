@@ -432,6 +432,7 @@ def parse_seqfile(data, filetype):
             if not offset == prev:
                 global ExtC
                 if not ExtC:
+                    # TODO: implement this
                     print("Extended Bank C detected. No .AIFF files will be exported")
                 ExtC = True
         else:

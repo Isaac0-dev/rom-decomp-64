@@ -1,4 +1,5 @@
 from __future__ import annotations
+from context import LevelAreaContext
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -142,6 +143,9 @@ class LevelRecord:
     history: List[str] = field(default_factory=list)
     script_text: str = ""
 
+    def __str__(self):
+        return self.name or self.level_name
+
 
 # ---------------------------------------------------------------------------
 # Texture records
@@ -170,6 +174,11 @@ class TextureRecord:
     # Raw palette bytes (CI textures only)
     palette_data: Optional[bytes] = None
 
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
+
 
 # ---------------------------------------------------------------------------
 # Behavior records
@@ -186,8 +195,16 @@ class BehaviorRecord:
     rom_offset: int = 0
     beh_name: str = ""
     hash: str = ""
+    fuzzy_hash: str = ""
+    anon_hash: str = ""
     commands: List[CommandIR] = field(default_factory=list)
     script_text: str = ""  # Deprecated: use commands for serialization
+    # Analysis pass fields
+    confidence: float = 0.0
+    is_vanilla: Optional[bool] = None  # None = not yet analysed
+
+    def __str__(self):
+        return self.beh_name
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +220,18 @@ class GeoRecord:
 
     seg_addr: int = 0
     name: str = ""
+    hash: str = ""
+    fuzzy_hash: str = ""
     commands: List[CommandIR] = field(default_factory=list)
     script_text: str = ""  # Deprecated: use commands for serialization
+    # Analysis pass fields
+    confidence: float = 0.0
+    is_vanilla: Optional[bool] = None
+
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +249,11 @@ class CollisionRecord:
     name: str = ""
     commands: List[CommandIR] = field(default_factory=list)
     script_text: str = ""  # Deprecated: use commands for serialization
+
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +273,11 @@ class RoomsRecord:
     values: List[int] = field(default_factory=list)
     script_text: str = ""  # Deprecated: use commands for serialization
 
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
+
 
 # ---------------------------------------------------------------------------
 # Trajectory records
@@ -258,6 +295,9 @@ class TrajectoryRecord:
     points: List[Tuple[int, int, int, int]] = field(default_factory=list)
     script_text: str = ""
 
+    def __str__(self):
+        return self.name
+
 
 # ---------------------------------------------------------------------------
 # Display List records
@@ -272,8 +312,19 @@ class DisplayListRecord:
 
     seg_addr: int = 0
     name: str = ""
+    hash: str = ""
+    fuzzy_hash: str = ""
     commands: List[CommandIR] = field(default_factory=list)
+    microcode: str = "F3D"
     script_text: str = ""  # Deprecated: use commands for serialization
+    # Analysis pass fields
+    confidence: float = 0.0
+    is_vanilla: Optional[bool] = None
+
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +387,11 @@ class MacroRecord:
     # Each entry: (yaw_degrees, preset, posX, posY, posZ, behParam)
     entries: List[Tuple[int, int, int, int, int, int]] = field(default_factory=list)
 
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
+
 
 # ---------------------------------------------------------------------------
 # Skybox records
@@ -378,7 +434,10 @@ class VertexRecord:
     seg_addr: int = 0
     name: str = ""
     count: int = 0
+    pos_data: List[Tuple[int, int, int]] = field(default_factory=list)
     script_text: str = ""
+
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
 
 
 @dataclass
@@ -391,6 +450,11 @@ class LightRecord:
     name: str = ""
     type_name: str = ""
     script_text: str = ""
+
+    location: LevelAreaContext = field(default_factory=LevelAreaContext)
+
+    def __str__(self):
+        return self.name
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +508,10 @@ class RomDatabase:
     ) -> None:
         """Register or update a symbol in the global table."""
         if address in self.symbols:
+            # if name != self.symbols[address].name:
+            #     raise ValueError(
+            #         f"Symbol at address 0x{address:08X} {name} ({symbol_type}) already exists with name {self.symbols[address].name}"
+            #     )
             # Only update if the new symbol has higher confidence
             if confidence >= self.symbols[address].confidence:
                 self.symbols[address].name = name
@@ -454,8 +522,27 @@ class RomDatabase:
                 address=address, name=name, type=symbol_type, confidence=confidence
             )
 
-    def resolve_symbol(self, address: int, default: Optional[str] = None) -> str:
+    def resolve_symbol(self, address: int, location: LevelAreaContext, type: str) -> str:
         """Look up a symbol name by address. Returns default or hex string if not found."""
         if address in self.symbols:
             return self.symbols[address].name
-        return default if default is not None else f"0x{address:08X}"
+
+        from segment import segmented_to_virtual, segment_from_addr
+
+        # We'll build a router here that constructs the names for symbols
+        name = ""
+        if location is not None and location.curr_level != -1:
+            from utils import level_num_to_str
+
+            name += f"{level_num_to_str[location.curr_level]}_"
+            if location.curr_area != -1:
+                name += f"area_{location.curr_area}_"
+
+        phys = segmented_to_virtual(address)
+        seg_num = segment_from_addr(address)
+
+        name += f"{type}_{address:08X}_{phys:08X}_seg{seg_num}"
+
+        return name
+
+        # raise ValueError(f"Unknown symbol at address 0x{address:08X} (type: {type})")

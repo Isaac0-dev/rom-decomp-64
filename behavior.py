@@ -15,6 +15,7 @@ from segment import get_segment, where_is_segment_loaded, get_loaded_segment_num
 from base_processor import BaseProcessor
 from rom_database import BehaviorRecord, CommandIR
 from context import ctx
+from utils import debug_fail
 
 # --- CALL_NATIVE function matching ---
 _func_matcher = None
@@ -221,13 +222,17 @@ def _build_structural_repr(
                 parts.append(f"{target:08X}")
         elif opcode == 0x0C:  # CALL_NATIVE
             vram_addr = words[1] if len(words) >= 2 else 0
-            func_name = resolve_call_native(vram_addr)
-            if func_name:
-                parts.append(func_name)
-            elif call_native_mode == "fuzzy":
+            if call_native_mode == "anonymous":
+                # Always anonymous — for cross-ROM structural comparison
                 parts.append("UNKNOWN")
             else:
-                parts.append(f"{vram_addr:08X}")
+                func_name = resolve_call_native(vram_addr)
+                if func_name:
+                    parts.append(func_name)
+                elif call_native_mode == "fuzzy":
+                    parts.append("UNKNOWN")
+                else:
+                    parts.append(f"{vram_addr:08X}")
         elif opcode in [0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12]:  # Fields
             parts.append(f"{(words[0] >> 16) & 0xFF:02X}:{words[0] & 0xFFFF:04X}")
         elif opcode == 0x1B:  # SET_MODEL
@@ -273,6 +278,22 @@ def structural_hash_behavior_fuzzy(commands_data, script_start=0):
     return hashlib.sha256(structure.encode("utf-8")).hexdigest()[:16]
 
 
+def structural_hash_behavior_anonymous(commands_data, script_start=0):
+    """Hash with ALL CALL_NATIVE entries as UNKNOWN and normalized jumps.
+
+    This produces an identical hash whether or not the function matcher
+    can resolve C function pointers — essential for matching behaviours
+    in ROMhacks where the code segment has been relocated.
+    """
+    structure = _build_structural_repr(
+        commands_data,
+        call_native_mode="anonymous",
+        script_start=script_start,
+        jump_mode="normalized",
+    )
+    return hashlib.sha256(structure.encode("utf-8")).hexdigest()[:16]
+
+
 # --- Behavior Command Handlers ---
 
 
@@ -302,8 +323,8 @@ def parse_DELAY(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
 
 
 def parse_CALL(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
-    bhv_name = get_behavior_processor().parse(cmd[1], txt=sTxt)
-    return CommandIR(0x02, [bhv_name], name="CALL"), False
+    bhv_rec = get_behavior_processor().parse(cmd[1], txt=sTxt)
+    return CommandIR(0x02, [bhv_rec], name="CALL"), False
 
 
 def parse_RETURN(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
@@ -311,8 +332,8 @@ def parse_RETURN(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
 
 
 def parse_GOTO(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
-    bhv_name = get_behavior_processor().parse(cmd[1], txt=sTxt)
-    return CommandIR(0x04, [bhv_name], name="GOTO"), True
+    bhv_rec = get_behavior_processor().parse(cmd[1], txt=sTxt)
+    return CommandIR(0x04, [bhv_rec], name="GOTO"), True
 
 
 def parse_BEGIN_REPEAT(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
@@ -472,8 +493,8 @@ def parse_SET_MODEL(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
 
 
 def parse_SPAWN_CHILD(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
-    bhv_name = get_behavior_processor().parse(cmd[2], txt=sTxt)
-    return CommandIR(0x1C, [f"0x{cmd[1]:02X}", bhv_name], name="SPAWN_CHILD"), False
+    bhv_rec = get_behavior_processor().parse(cmd[2], txt=sTxt)
+    return CommandIR(0x1C, [f"0x{cmd[1]:02X}", bhv_rec], name="SPAWN_CHILD"), False
 
 
 def parse_DEACTIVATE(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
@@ -558,10 +579,10 @@ def parse_ANIMATE(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
 
 
 def parse_SPAWN_CHILD_WITH_PARAM(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
-    bhv_name = get_behavior_processor().parse(cmd[2], txt=sTxt)
+    bhv_rec = get_behavior_processor().parse(cmd[2], txt=sTxt)
     return (
         CommandIR(
-            0x29, [cmd[0] & 0xFFFF, f"0x{cmd[1]:02X}", bhv_name], name="SPAWN_CHILD_WITH_PARAM"
+            0x29, [cmd[0] & 0xFFFF, f"0x{cmd[1]:02X}", bhv_rec], name="SPAWN_CHILD_WITH_PARAM"
         ),
         False,
     )
@@ -583,8 +604,8 @@ def parse_SET_HITBOX_WITH_OFFSET(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, 
 
 
 def parse_SPAWN_OBJ(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
-    bhv_name = get_behavior_processor().parse(cmd[2], txt=sTxt)
-    return CommandIR(0x2C, [f"0x{cmd[1]:02X}", bhv_name], name="SPAWN_OBJ"), False
+    bhv_rec = get_behavior_processor().parse(cmd[2], txt=sTxt)
+    return CommandIR(0x2C, [f"0x{cmd[1]:02X}", bhv_rec], name="SPAWN_OBJ"), False
 
 
 def parse_SET_HOME(cmd: List[int], sTxt: Any) -> Tuple[CommandIR, bool]:
@@ -740,31 +761,29 @@ BEHAVIOR_COMMANDS: Dict[int, Dict[str, Any]] = {
 class BehaviorProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
-        self.parsed_behaviors: Dict[Tuple[int, int], str] = {}
 
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[BehaviorRecord]:
         sTxt = kwargs.get("txt")
         if not segmented_addr:
-            return "NULL"
+            return None
 
         seg_num = segment_from_addr(segmented_addr)
         segment_info = where_is_segment_loaded(seg_num)
         if segment_info is None:
-            return f"bhv_fail_0x{segmented_addr:08X}"
+            debug_fail(f"Failed to find segment {seg_num} for behavior at 0x{segmented_addr:08x}")
+            return None
 
         start, end = segment_info
         db_key = (segmented_addr, start)
 
         # Check database for already assigned name
         if self.ctx.db and db_key in self.ctx.db.behaviors:
-            return self.ctx.db.behaviors[db_key].beh_name
-
-        if db_key in self.parsed_behaviors:
-            return self.parsed_behaviors[db_key]
+            return self.ctx.db.behaviors[db_key]
 
         data = get_segment(seg_num)
         if data is None:
-            return f"bhv_fail_0x{segmented_addr:08X}"
+            debug_fail(f"Failed to load segment {seg_num} for behavior at 0x{segmented_addr:08x}")
+            return None
 
         rom = CustomBytesIO(data)
         rom.seek(offset_from_segment_addr(segmented_addr))
@@ -797,6 +816,7 @@ class BehaviorProcessor(BaseProcessor):
 
         prec_hash = structural_hash_behavior(commands_data, script_start=segmented_addr)
         fuzzy_hash = structural_hash_behavior_fuzzy(commands_data, script_start=segmented_addr)
+        anon_hash = structural_hash_behavior_anonymous(commands_data, script_start=segmented_addr)
 
         name = f"bhv_unknown_{segmented_addr:08X}"
         known_name = None
@@ -810,22 +830,32 @@ class BehaviorProcessor(BaseProcessor):
             known_name = CUSTOM_BEHAVIOR_HASHES[fuzzy_hash]
         elif fuzzy_hash in KNOWN_BEHAVIOR_HASHES:
             known_name = KNOWN_BEHAVIOR_HASHES[fuzzy_hash]
+        elif anon_hash in CUSTOM_BEHAVIOR_HASHES:
+            known_name = CUSTOM_BEHAVIOR_HASHES[anon_hash]
+        elif anon_hash in KNOWN_BEHAVIOR_HASHES:
+            known_name = KNOWN_BEHAVIOR_HASHES[anon_hash]
 
         if known_name and not (
             known_name.startswith("bhv_unknown") or "_bhv_unknown_" in known_name
         ):
             name = known_name
 
-        if self.ctx.db:
-            self.ctx.db.behaviors[db_key] = BehaviorRecord(
-                seg_addr=segmented_addr,
-                beh_name=name,
-                hash=prec_hash,
-                commands=commands_ir,
-            )
+        if self.ctx.db is None:
+            debug_fail(f"Failed to find database for behavior at 0x{segmented_addr:08x}")
+            return None
 
-        self.parsed_behaviors[db_key] = name
-        return name
+        record = BehaviorRecord(
+            seg_addr=segmented_addr,
+            beh_name=name,
+            hash=prec_hash,
+            fuzzy_hash=fuzzy_hash,
+            anon_hash=anon_hash,
+            commands=commands_ir,
+        )
+        self.ctx.db.behaviors[db_key] = record
+        self.ctx.db.set_symbol(segmented_addr, name, "Behavior")
+
+        return record
 
     def serialize(self, record: BehaviorRecord) -> str:
         output = f"const BehaviorScript {record.beh_name}[] = " + "{\n"
@@ -850,17 +880,14 @@ def get_behavior_processor():
 
 # --- shims ---
 def parse_behavior_script(addr, txt, context_prefix=None):
-    processor = get_behavior_processor()
-    name = processor.parse(addr, txt=txt, context_prefix=context_prefix)
-    # The hash is stored in the record
+    p = get_behavior_processor()
+    res = p.parse(addr, txt=txt, context_prefix=context_prefix)
+
+    beh_name = str(res)
     beh_hash = ""
-    seg_num = segment_from_addr(addr)
-    segment_info = where_is_segment_loaded(seg_num)
-    if segment_info and ctx.db:
-        db_key = (addr, segment_info[0])
-        if db_key in ctx.db.behaviors:
-            beh_hash = ctx.db.behaviors[db_key].hash
-    return name, beh_hash
+    if hasattr(res, "hash"):
+        beh_hash = res.hash
+    return beh_name, beh_hash
 
 
 def parse_behavior(rom_or_addr, sTxt, segmented_addr=None):

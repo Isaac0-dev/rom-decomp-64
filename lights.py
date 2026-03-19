@@ -1,7 +1,7 @@
 from utils import debug_fail, debug_print, offset_from_segment_addr, segment_from_addr
 from segment import CustomBytesIO, get_segment, where_is_segment_loaded
 import struct
-from typing import Dict, Tuple, Any, List
+from typing import Dict, Tuple, Any, List, Optional
 from dataclasses import dataclass
 from context import ctx
 from base_processor import BaseProcessor
@@ -32,28 +32,30 @@ class LightProcessor(BaseProcessor):
         super().__init__(context)
         self.parsed_lights: Dict[Tuple[int, int, int, int], ParsedLight] = {}
 
-    def parse(self, segmented_addr: int, **kwargs: Any) -> Tuple[str, str]:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[LightRecord]:
         size = kwargs.get("size", 0)
         context_prefix = kwargs.get("context_prefix")
+
+        if not segmented_addr:
+            debug_fail("No segmented address provided for light")
+            return None
 
         seg_num = segment_from_addr(segmented_addr)
         offset = offset_from_segment_addr(segmented_addr)
         output = where_is_segment_loaded(seg_num)
         if output is None:
-            return "NULL", "NULL"
+            debug_fail(
+                f"Segment {seg_num} for light 0x{segmented_addr:08X} not loaded (size: {size})"
+            )
+            return None
         start, end = output
 
         key = (segmented_addr, size, start, end)
-        if key in self.parsed_lights:
-            return self.parsed_lights[key].name, self.parsed_lights[key].type_name
-        if not segmented_addr:
-            return "NULL", "NULL"
 
         # DB key for lights
         db_key = (segmented_addr, size, start)
         if self.ctx.db and db_key in self.ctx.db.lights:
-            rec = self.ctx.db.lights[db_key]
-            return rec.name, rec.type_name
+            return self.ctx.db.lights[db_key]
 
         # Determine type based on size
         is_ambient = size == 8
@@ -78,7 +80,7 @@ class LightProcessor(BaseProcessor):
         data = get_segment(seg_num)
         if data is None:
             debug_print(f"WARNING: Segment {seg_num} for light 0x{segmented_addr:08X} not loaded")
-            return name, type_name
+            return None
 
         segment_data = CustomBytesIO(data)
         segment_data.seek(offset)
@@ -159,12 +161,16 @@ class LightProcessor(BaseProcessor):
 
         output_str = "\n".join(output_lines) + "\n"
 
-        if self.ctx.db:
-            self.ctx.db.lights[db_key] = LightRecord(
-                seg_addr=segmented_addr, name=name, type_name=type_name, script_text=output_str
-            )
+        self.ctx.db.lights[db_key] = LightRecord(
+            seg_addr=segmented_addr,
+            name=name,
+            type_name=type_name,
+            script_text=output_str,
+            location=self.ctx.level_area,
+        )
+        self.ctx.db.set_symbol(segmented_addr, name, "Light")
 
-        return name, type_name
+        return self.ctx.db.lights[db_key]
 
     def serialize(self, record: LightRecord) -> str:
         if self.ctx.txt and record.script_text:

@@ -290,7 +290,7 @@ def set_texture_image(
     if context_prefix:
         name = f"{context_prefix}_{name}"
 
-    if ctx.db is not None and name not in ctx.db.textures:
+    if name not in ctx.db.textures:
         from rom_database import TextureRecord
 
         ctx.db.textures[name] = TextureRecord(
@@ -304,8 +304,9 @@ def set_texture_image(
             height=0,  # Unknown yet
             name=name,
         )
+        ctx.db.set_symbol(segmented_addr, name, "Texture")
 
-    return name
+    return ctx.db.textures[name]
 
 
 def load_block(
@@ -395,6 +396,7 @@ def load_block(
             height=h,
             name=name,
         )
+        ctx.db.set_symbol(addr, name, "Texture")
 
     write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
 
@@ -464,6 +466,7 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
             height=h,
             name=name,
         )
+        ctx.db.set_symbol(addr, name, "Texture")
 
     write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
 

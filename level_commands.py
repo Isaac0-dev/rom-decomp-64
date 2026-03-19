@@ -567,11 +567,11 @@ def AREA(values):
 
     from geo_layout import parse_geo_layout
 
-    geo_name = parse_geo_layout(geo, ctx.txt, context_prefix=geo_prefix, is_level=True)
+    geo_rec = parse_geo_layout(geo, ctx.txt, context_prefix=geo_prefix, is_level=True)
 
     params = [
         index,
-        geo_name,
+        geo_rec,
     ]
     ret = format_output("AREA", params)
     ctx.indent += 1
@@ -594,7 +594,7 @@ def LOAD_MODEL_FROM_DL(values):
 
     from display_list import parse_display_list
 
-    dl_name = parse_display_list(dl, ctx.txt, ctx.current_context_prefix)
+    dl_rec = parse_display_list(dl, ctx.txt, ctx.current_context_prefix)
 
     from model_ids import resolve_model_id
 
@@ -602,7 +602,7 @@ def LOAD_MODEL_FROM_DL(values):
 
     params = [
         model_param,
-        dl_name,
+        dl_rec,
         f"0x{layer:02x}",
     ]
 
@@ -610,7 +610,7 @@ def LOAD_MODEL_FROM_DL(values):
 
     ctx._pending_record = ScriptRecord(
         record_type=RecordType.LOAD_MODEL_FROM_DL,
-        data={"model": model, "layer": layer, "dl_name": dl_name, "dl_addr": dl},
+        data={"model": model, "layer": layer, "dl_name": str(dl_rec), "dl_addr": dl},
     )
 
     formatted_output = format_output("LOAD_MODEL_FROM_DL", params)
@@ -624,7 +624,7 @@ def LOAD_MODEL_FROM_GEO(values):
 
     from geo_layout import parse_geo_layout
 
-    geo_name = parse_geo_layout(geo, ctx.txt, context_prefix=ctx.current_context_prefix)
+    geo_rec = parse_geo_layout(geo, ctx.txt, context_prefix=ctx.current_context_prefix)
 
     comment = ""
     seg_num = segment_from_addr(geo)
@@ -637,14 +637,14 @@ def LOAD_MODEL_FROM_GEO(values):
 
     params = [
         model_param,
-        geo_name,
+        geo_rec,
     ]
 
     from deferred_output import ScriptRecord, RecordType
 
     ctx._pending_record = ScriptRecord(
         record_type=RecordType.LOAD_MODEL_FROM_GEO,
-        data={"model": model, "geo_name": geo_name, "geo_addr": geo},
+        data={"model": model, "geo_name": str(geo_rec), "geo_addr": geo},
     )
 
     formatted_output = format_output("LOAD_MODEL_FROM_GEO", params)
@@ -665,11 +665,13 @@ def OBJECT_WITH_ACTS(values):
     behParam = CMD_W(values)
     beh = CMD_PTR(values)
 
-    from behavior import parse_behavior_script, KNOWN_BEHAVIOR_HASHES
+    from behavior import KNOWN_BEHAVIOR_HASHES, get_behavior_processor
 
-    beh_name, beh_name_hash = parse_behavior_script(
-        beh, ctx.txt, context_prefix=ctx.current_context_prefix
+    bhv_rec = get_behavior_processor().parse(
+        beh, txt=ctx.txt, context_prefix=ctx.current_context_prefix
     )
+    beh_name = str(bhv_rec)
+    beh_name_hash = getattr(bhv_rec, "hash", "") if not isinstance(bhv_rec, str) else ""
 
     if beh_name == "editor_Scroll_Texture2":
         beh_name = "editor_Scroll_Texture"
@@ -714,7 +716,7 @@ def OBJECT_WITH_ACTS(values):
         format_param_string("angleY", angleY, 2),
         format_param_string("angleZ", angleZ, 2),
         format_param_hex("behParam", behParam, 4),
-        beh_name,
+        bhv_rec,
     ]
 
     from deferred_output import ScriptRecord, RecordType
@@ -834,8 +836,8 @@ def TERRAIN(values):
     _, _, _ = CMD_BBH(values)
     collision = CMD_PTR(values)
 
-    collision_name = parse_collision(collision, ctx.txt, context_prefix=ctx.current_context_prefix)
-    params = [collision_name]
+    collision_rec = parse_collision(collision, ctx.txt, context_prefix=ctx.current_context_prefix)
+    params = [collision_rec]
     return format_output("TERRAIN", params)
 
 
@@ -845,11 +847,11 @@ def ROOMS(values):
     _, _, _ = CMD_BBH(values)
     surfaceRooms = CMD_PTR(values)
 
-    name = get_rooms_processor().parse(surfaceRooms)
-    if name == "NULL":
+    res = get_rooms_processor().parse(surfaceRooms)
+    if res == "NULL":
         return format_output("ROOMS", [f"0x{surfaceRooms:08x}"])
 
-    return format_output("ROOMS", [name])
+    return format_output("ROOMS", [res])
 
 
 def SHOW_DIALOG(values):
@@ -915,10 +917,10 @@ def MACRO_OBJECTS(values):
 
     (_, _, _) = CMD_BBH(values)
     objList = CMD_PTR(values)
-    macro_list_name = parse_macro_object_list(
+    macro_list_rec = parse_macro_object_list(
         objList, ctx.txt, context_prefix=ctx.current_context_prefix
     )
-    return format_output("MACRO_OBJECTS", [macro_list_name])
+    return format_output("MACRO_OBJECTS", [macro_list_rec])
 
 
 def CMD3A(values):

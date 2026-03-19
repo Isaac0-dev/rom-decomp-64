@@ -1,7 +1,7 @@
 from utils import debug_fail, debug_print, offset_from_segment_addr, segment_from_addr
 from segment import CustomBytesIO, get_segment, where_is_segment_loaded
 import struct
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Optional
 from base_processor import BaseProcessor
 from rom_database import VertexRecord
 from context import ctx
@@ -12,24 +12,24 @@ class VertexProcessor(BaseProcessor):
         super().__init__(context)
         self.parsed_vertices: Dict[tuple, Tuple[str, int]] = {}
 
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[VertexRecord]:
         count = kwargs.get("count", 0)
         context_prefix = kwargs.get("context_prefix")
         parent_dl = kwargs.get("parent_dl")
 
         if not segmented_addr:
-            return "NULL"
+            debug_print("No segmented address provided")
+            return None
 
         seg_num = segment_from_addr(segmented_addr)
         offset = offset_from_segment_addr(segmented_addr)
         output = where_is_segment_loaded(seg_num)
         if output is None:
-            return "NULL"
+            debug_print(
+                f"Segment {seg_num} for vertices 0x{segmented_addr:08X} not loaded (count: {count})"
+            )
+            return None
         start, end = output
-
-        key = (segmented_addr, count, start, end, parent_dl)
-        if key in self.parsed_vertices:
-            return self.parsed_vertices[key][0]
 
         # Use count in the symbol to avoid reusing an under-sized buffer if a DL
         # references the same address with a larger count later.
@@ -41,14 +41,14 @@ class VertexProcessor(BaseProcessor):
         # DB key for vertices
         db_key = (segmented_addr, count, start)
         if self.ctx.db and db_key in self.ctx.db.vertices:
-            return self.ctx.db.vertices[db_key].name
+            return self.ctx.db.vertices[db_key]
 
         data = get_segment(seg_num)
         if data is None:
             debug_print(
                 f"WARNING: Segment {seg_num} for vertices 0x{segmented_addr:08X} not loaded"
             )
-            return name
+            return None
 
         segment_data = CustomBytesIO(data)
         segment_data.seek(offset)
@@ -60,11 +60,13 @@ class VertexProcessor(BaseProcessor):
 
         actual_count = len(vtx_data_block) // 16
 
+        pos_data = []
         if actual_count > 0:
             valid_block = vtx_data_block[: actual_count * 16]
 
             try:
                 for x, y, z, flag, u, v, r, g, b, a in struct.iter_unpack(">3hH2h4B", valid_block):
+                    pos_data.append((x, y, z))
                     output_lines.append(
                         "    {{{ %5d, %6d, %6d}, 0, { %5d, %6d}, {%2d, %2d, %2d, %2d}}},"
                         % (x, y, z, u, v, r, g, b, a)
@@ -79,14 +81,19 @@ class VertexProcessor(BaseProcessor):
         output_lines.append("};")
         output_str = "\n".join(output_lines) + "\n\n"
 
+        key = (segmented_addr, count, start, end, parent_dl)
         self.parsed_vertices[key] = (name, actual_count)
 
-        if self.ctx.db:
-            self.ctx.db.vertices[db_key] = VertexRecord(
-                seg_addr=segmented_addr, name=name, count=actual_count, script_text=output_str
-            )
+        self.ctx.db.vertices[db_key] = VertexRecord(
+            seg_addr=segmented_addr,
+            name=name,
+            count=actual_count,
+            pos_data=pos_data,
+            script_text=output_str,
+            location=self.ctx.level_area,
+        )
 
-        return name
+        return self.ctx.db.vertices[db_key]
 
     def serialize(self, record: VertexRecord) -> str:
         if self.ctx.txt and record.script_text:

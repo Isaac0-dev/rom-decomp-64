@@ -30,17 +30,6 @@ class BaseProcessor(ABC):
         """Helper to access the output manager."""
         return self.ctx.txt
 
-    def resolve_symbol(self, address: int, default: Optional[str] = None) -> str:
-        """Look up or create a symbol name for the given address."""
-        if self.db:
-            return self.db.resolve_symbol(address, default)
-        return default if default is not None else f"0x{address:08X}"
-
-    def set_symbol(self, address: int, name: str, type: str = "function", confidence: float = 1.0):
-        """Register a discovered symbol in the global database."""
-        if self.db:
-            self.db.set_symbol(address, name, type, confidence)
-
     def get_segment_stream(self, segmented_addr: int) -> Optional[CustomBytesIO]:
         """
         Helper to get a seeked CustomBytesIO stream for a segmented address.

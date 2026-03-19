@@ -50,12 +50,11 @@ class GBI2(GBI1):
         tile_val = self._SHIFTR(cmd0, 8, 3)
         on_val = self._SHIFTR(cmd0, 1, 1)  # GBI2 uses bit 1 for ON
 
-        str(tile_val)
-
         if dis:
+            on_str = "G_ON" if on_val else "G_OFF"
             dis.set_cmd(
                 "gsSPTexture",
-                {"w0": cmd0, "w1": cmd1, "level": level, "tile": tile_val, "on": on_val},
+                {"s": s, "t": t, "level": level, "tile": tile_val, "on": on_str},
             )
             import display_list
 
@@ -77,10 +76,6 @@ class GBI2(GBI1):
                 # Store dimensions for texture extraction
                 set_tile_size(tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2)
 
-            on_str = "G_ON" if on_val else "G_OFF"
-            params = [f"0x{s:04X}", f"0x{t:04X}", level, tile_val, on_str]
-            dis.text(f"gsSPTexture({self.format_params(params)})")
-
     def execute_vertex(self, cmd0, cmd1, dis):
         count = self._SHIFTR(cmd0, 12, 8)
         v_end = (cmd0 & 0xFF) >> 1
@@ -94,31 +89,20 @@ class GBI2(GBI1):
             dis.set_cmd(
                 "gsSPVertex",
                 {
-                    "w0": cmd0,
-                    "w1": cmd1,
-                    "v0": v0,
-                    "count": count,
                     "vtx_name": vertices_name,
+                    "count": count,
+                    "v0": v0,
                     "address": address,
                 },
             )
-            params = [
-                f"/* vertices */ {vertices_name}",
-                f"/* count */ {count}",
-                f"/* v0 */ {v0}",
-            ]
-            dis.text(f"gsSPVertex({self.format_params(params)})")
 
     def execute_tri1(self, cmd0, cmd1, dis):
         v0 = self._SHIFTR(cmd0, 1, 7)
         v1 = self._SHIFTR(cmd0, 9, 7)
         v2 = self._SHIFTR(cmd0, 17, 7)
-        flag = self._SHIFTR(cmd1, 24, 8)
 
         if dis:
-            dis.set_cmd("gsSP1Triangle", {"w0": cmd0, "w1": cmd1, "indices": [v0, v1, v2]})
-            params = [v0, v1, v2, flag]
-            dis.text(f"gsSP1Triangle({self.format_params(params)})")
+            dis.set_cmd("gsSP1Triangle", {"v0": v0, "v1": v1, "v2": v2, "flag": 0})
 
     def execute_tri2(self, cmd0, cmd1, dis):
         v00 = self._SHIFTR(cmd1, 1, 7)
@@ -131,36 +115,30 @@ class GBI2(GBI1):
         if dis:
             dis.set_cmd(
                 "gsSP2Triangles",
-                {"w0": cmd0, "w1": cmd1, "indices": [v00, v01, v02, v10, v11, v12]},
+                {
+                    "v00": v00,
+                    "v01": v01,
+                    "v02": v02,
+                    "flag0": 0,
+                    "v10": v10,
+                    "v11": v11,
+                    "v12": v12,
+                    "flag1": 0,
+                },
             )
-            params = [v00, v01, v02, 0, v10, v11, v12, 0]
-            dis.text(f"gsSP2Triangles({self.format_params(params)})")
 
     def execute_matrix(self, cmd0, cmd1, dis):
-        push = (cmd0 & 0x1) == 0
-        replace = (cmd0 >> 1) & 0x1
-        projection = (cmd0 >> 2) & 0x1
-        address = cmd1
-
         if dis:
-            dis.set_cmd("gsSPMatrix", {"w0": cmd0, "w1": cmd1})
+            push = (cmd0 & 0x1) == 0
+            replace = (cmd0 >> 1) & 0x1
+            projection = (cmd0 >> 2) & 0x1
             t = []
-            if projection:
-                t.append("G_MTX_PROJECTION")
-            else:
-                t.append("G_MTX_MODELVIEW")
-
-            if replace:
-                t.append("G_MTX_LOAD")
-            else:
-                t.append("G_MTX_MUL")
-
+            t.append("G_MTX_PROJECTION" if projection else "G_MTX_MODELVIEW")
+            t.append("G_MTX_LOAD" if replace else "G_MTX_MUL")
             if push:
                 t.append("G_MTX_PUSH")
-            # else: t.append("G_MTX_NOPUSH")
-
-            params = [f"0x{address:08X}", " | ".join(t)]
-            dis.text(f"// gsSPMatrix({self.format_params(params)})")
+            flags_str = " | ".join(t)
+            dis.set_cmd("gsSPMatrix", {"flags": flags_str})
 
     def execute_dl(self, cmd0, cmd1, dis):
         # Same as GBI1 but different opcode
@@ -168,26 +146,21 @@ class GBI2(GBI1):
         address = cmd1
 
         if dis:
-            dl_name = dis.parse_dl(address)
+            dl_record = dis.parse_dl(address)
             if param == G_DL_PUSH:
-                dis.set_cmd("gsSPDisplayList", {"w0": cmd0, "w1": cmd1, "subdl": True})
-                dis.text(f"gsSPDisplayList({dl_name})")
+                dis.set_cmd("gsSPDisplayList", {"dl": dl_record})
             else:
-                dis.set_cmd("gsSPBranchList", {"w0": cmd0, "w1": cmd1})
-                dis.text(f"gsSPBranchList({dl_name})")
+                dis.set_cmd("gsSPBranchList", {"dl": dl_record})
                 dis.branch_taken = True
 
     def execute_end_dl(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsSPEndDisplayList", {"w0": cmd0, "w1": cmd1, "end": True})
-            dis.text("gsSPEndDisplayList()")
+            dis.set_cmd("gsSPEndDisplayList", {"end": True})
             dis.end_dl = True
 
     def execute_move_mem(self, cmd0, cmd1, dis):
-        length = self._SHIFTR(cmd0, 16, 8) << 1
-        offset = self._SHIFTR(cmd0, 8, 8) << 3
         type_val = cmd0 & 0xFE
-        address = cmd1
+        offset = self._SHIFTR(cmd0, 8, 8) << 3
 
         if dis:
             # GBI2 MoveMem types
@@ -195,62 +168,53 @@ class GBI2(GBI1):
             # G_GBI2_MV_LIGHT:    10
 
             if type_val == 8:  # Viewport
-                dis.set_cmd("gsSPViewport", {"w0": cmd0, "w1": cmd1})
-                dis.text(self.comment_out(f"gsSPViewport(0x{address:08X})"))
-            elif type_val == 10:  # Light
-                # offset determines which light part
-                # G_GBI2_MVO_L0: 2 * 24 = 48
-                # stride is 24
-                if offset >= 48:
-                    light_idx = (offset - 48) // 24
+                raise Exception("Viewports are unimplemented")
+                # import rom_database as db
 
-                    if length == 40:
-                        l1_name = lights.parse_light(cmd1, 24, dis.sTxt, dis.context_prefix)
-                        l2_name = lights.parse_light(cmd1 + 24, 16, dis.sTxt, dis.context_prefix)
-
-                        dis.set_cmd("gsSPSetLights1", {"w0": cmd0, "w1": cmd1})
-                        dis.text(f"gsSPSetLights1({l1_name})")
-                        dis.text(f"gsSPLight(&{l2_name}, {light_idx + 2})")
-                        dis.text("gsSPNumLights(NUMLIGHTS_2)")
-                    else:
-                        light_name = lights.parse_light(cmd1, length, dis.sTxt, dis.context_prefix)
-                        dis.set_cmd("gsSPLight", {"w0": cmd0, "w1": cmd1})
-                        dis.text(f"gsSPLight(&{light_name}, {light_idx})")
+                # vp_name = db.resolve_symbol(cmd1, dis.context_prefix, "viewport")
+                # dis.set_cmd("gsSPViewport", {"viewport": vp_name})
+            if type_val == 10:  # Light
+                length = self._SHIFTR(cmd0, 16, 8) << 1
+                light_idx = (offset - 48) // 24
+                if length == 40:
+                    l1_record = lights.parse_light(cmd1, 24, dis.sTxt, dis.context_prefix)
+                    l2_record = lights.parse_light(cmd1 + 24, 16, dis.sTxt, dis.context_prefix)
+                    dis.set_cmd("gsSPSetLights1", {"light1": l1_record, "light2": l2_record})
                 else:
-                    dis.text(
-                        f"// gsDma1p(G_MOVEMEM, 0x{address:08X}, {length}, {offset}, {type_val})"
-                    )
-            else:
-                dis.text(f"// gsDma1p(G_MOVEMEM, 0x{address:08X}, {length}, {offset}, {type_val})")
+                    light_record = lights.parse_light(cmd1, length, dis.sTxt, dis.context_prefix)
+                    dis.set_cmd("gsSPLight", {"light": light_record, "idx": light_idx})
+                return
+
+            dis.set_cmd("gsSPMoveMem", {}, commented_out=True)
 
     def execute_move_word(self, cmd0, cmd1, dis):
-        type_val = self._SHIFTR(cmd0, 16, 8)
-        offset = self._SHIFTR(cmd0, 0, 16)
+        type_val = cmd0 & 0xFF
+        offset = self._SHIFTR(cmd0, 8, 16)
         data = cmd1
-
         if dis:
             if type_val == 0x02:  # G_MW_NUMLIGHT
                 num_lights = data // 24
-                dis.set_cmd("gsSPNumLights", {"w0": cmd0, "w1": cmd1})
-                dis.text(f"gsSPNumLights({num_lights})")
+                dis.set_cmd("gsSPNumLights", {"count": num_lights})
             elif type_val == 0x06:  # G_MW_SEGMENT
                 segment = (offset >> 2) & 0xF
-                dis.set_cmd("gsSPSegment", {"w0": cmd0, "w1": cmd1})
-                dis.text(self.comment_out(f"gsSPSegment({segment}, 0x{data:08X})"))
+                dis.set_cmd("gsSPSegment", {"seg": segment, "addr": data}, commented_out=True)
             elif type_val == 0x08:  # G_MW_FOG
                 multiplier = data >> 16
                 fog_offset = data & 0xFFFF
-                dis.set_cmd("gsSPFogPosition", {"w0": cmd0, "w1": cmd1})
-                dis.text(f"gsSPFogPosition({multiplier}, {fog_offset})")
+                dis.set_cmd("gsSPFogPosition", {"mul": multiplier, "off": fog_offset})
             else:
-                dis.set_cmd("gsSPMoveWord", {"w0": cmd0, "w1": cmd1})
-                dis.text(self.comment_out(f"gsSPMoveWord({type_val}, {offset}, {data})"))
+                from gbi_defines import G_MOVEWORD_INDICES
+
+                index_name = G_MOVEWORD_INDICES.get(type_val, f"0x{type_val:02X}")
+                dis.set_cmd(
+                    "gsSPMoveWord",
+                    {"index": index_name, "offset": offset, "data": data},
+                    commented_out=True,
+                )
 
     def execute_modify_vtx(self, cmd0, cmd1, dis):
         vtx = self._SHIFTR(cmd0, 1, 15)
         offset = self._SHIFTR(cmd0, 16, 8)
-        value = cmd1
-
         if dis:
             offset_name = {
                 0x10: "G_MWO_POINT_RGBA",
@@ -258,77 +222,58 @@ class GBI2(GBI1):
                 0x18: "G_MWO_POINT_XYSCREEN",
                 0x1C: "G_MWO_POINT_ZSCREEN",
             }.get(offset, f"0x{offset:02X}")
-            dis.set_cmd("gsSPModifyVertex", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"gsSPModifyVertex({vtx}, {offset_name}, 0x{value:08X})")
+            dis.set_cmd("gsSPModifyVertex", {"vtx": vtx, "offset": offset_name, "value": cmd1})
 
     def execute_cull_dl(self, cmd0, cmd1, dis):
         vstart = self._SHIFTR(cmd0, 1, 15)
         vend = self._SHIFTR(cmd1, 1, 15)
 
         if dis:
-            dis.set_cmd("gsSPCullDisplayList", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"gsSPCullDisplayList({vstart}, {vend})")
+            dis.set_cmd("gsSPCullDisplayList", {"v0": vstart, "vn": vend})
 
     def execute_branch_z(self, cmd0, cmd1, dis):
         vtx = self._SHIFTR(cmd0, 12, 12)
         zval = cmd1
-
         if dis:
-            dis.set_cmd("gsSPBranchLessZ", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gsSPBranchLessZ({vtx}, 0x{zval:08X})")
+            dis.set_cmd("gsSPBranchLessZ", {"vtx": vtx, "zval": zval}, commented_out=True)
 
     def execute_quad(self, cmd0, cmd1, dis):
         v00 = self._SHIFTR(cmd1, 1, 7)
         v01 = self._SHIFTR(cmd1, 9, 7)
         v02 = self._SHIFTR(cmd1, 17, 7)
-        v10 = self._SHIFTR(cmd0, 1, 7)
-        v11 = self._SHIFTR(cmd0, 9, 7)
         v12 = self._SHIFTR(cmd0, 17, 7)
 
         if dis:
             dis.set_cmd(
                 "gsSP1Quadrangle",
-                {"w0": cmd0, "w1": cmd1, "indices": [v00, v01, v02, v10, v11, v12]},
+                {"v0": v00, "v1": v01, "v2": v02, "v3": v12, "flag": 0},
             )
-            dis.text(f"gsSP1Quadrangle({v00}, {v01}, {v02}, {v12}, 0)")
 
     def execute_line_3d(self, cmd0, cmd1, dis):
-        # Not implemented in many emulators
         v0 = self._SHIFTR(cmd1, 1, 7)
         v1 = self._SHIFTR(cmd1, 9, 7)
-
         if dis:
-            dis.set_cmd("gsSPLine3D", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gsSPLine3D({v0}, {v1}, ...)")
+            dis.set_cmd("gsSPLine3D", {"v0": v0, "v1": v1, "flag": 0}, commented_out=True)
 
     def execute_bg_rect_1cyc(self, cmd0, cmd1, dis):
-        address = cmd1
-
         if dis:
-            dis.set_cmd("gSPBgRect1Cyc", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gSPBgRect1Cyc(0x{address:08X})")
+            dis.set_cmd("gSPBgRect1Cyc", {}, commented_out=True)
 
     def execute_bg_rect_copy(self, cmd0, cmd1, dis):
-        address = cmd1
-
         if dis:
-            dis.set_cmd("gSPBgRectCopy", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gSPBgRectCopy(0x{address:08X})")
+            dis.set_cmd("gSPBgRectCopy", {}, commented_out=True)
 
     def execute_obj_render_mode(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gSPObjRenderMode", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gSPObjRenderMode(0x{cmd1:08X})")
+            dis.set_cmd("gSPObjRenderMode", {}, commented_out=True)
 
     def execute_dma_io(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gSPDmaIo", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gSPDmaIo(0x{cmd0:08X}, 0x{cmd1:08X})")
+            dis.set_cmd("gSPDmaIo", {}, commented_out=True)
 
     def execute_pop_matrix(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsSPPopMatrix", {"w0": cmd0, "w1": cmd1})
-            dis.text("// gsSPPopMatrix(G_MTX_MODELVIEW)")
+            dis.set_cmd("gsSPPopMatrix", {}, commented_out=True)
 
     def execute_set_geometry_mode(self, cmd0, cmd1, dis):
         import display_list
@@ -342,30 +287,16 @@ class GBI2(GBI1):
         if dis:
             clr_flags = get_named_flags((~clr) & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS)
             set_flags = get_named_flags(set_val & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS)
-            dis.set_cmd("gsSPGeometryMode", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"gsSPGeometryMode(~({clr_flags}), {set_flags})")
+            dis.set_cmd("gsSPGeometryMode", {"clr": clr_flags, "set": set_flags})
 
     def execute_rdp_half_1(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPHalf1", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"gsDPHalf1(0x{cmd1:08X})")
+            dis.set_cmd("gsDPHalf1", {})
 
     def execute_rdp_half_2(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPHalf2", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"gsDPHalf2(0x{cmd1:08X})")
+            dis.set_cmd("gsDPHalf2", {})
 
     def execute_load_ucode(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsSPLoadUcode", {"w0": cmd0, "w1": cmd1})
-            dis.text(f"// gsSPLoadUcode(0x{cmd1:08X})")
-
-    def execute_noop(self, cmd0, cmd1, dis):
-        if dis:
-            dis.set_cmd("gsDPNoOp", {"w0": cmd0, "w1": cmd1})
-            dis.text("gsDPNoOp()")
-
-    def execute_sp_noop(self, cmd0, cmd1, dis):
-        if dis:
-            dis.set_cmd("gsSPNoOp", {"w0": cmd0, "w1": cmd1})
-            dis.text("gsSPNoOp()")
+            dis.set_cmd("gsSPLoadUcode", {}, commented_out=True)

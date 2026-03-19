@@ -151,7 +151,7 @@ geo_camera_callbacks: List[str] = ["geo_camera_main"]
 geo_camera_frustum_callbacks: List[str] = ["geo_camera_fov"]
 
 
-def get_dl_name(addr: int, sTxt: Any, context_prefix: Optional[str]) -> str:
+def get_dl_name(addr: int, sTxt: Any, context_prefix: Optional[str]) -> Any:
     if not addr:
         return "NULL"
     from display_list import get_display_list_processor
@@ -284,7 +284,7 @@ _geo_segment_stack: List[int] = []
 class GeoProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
-        self.parsed_geos: Dict[Tuple[int, int], str] = {}
+        self.parsed_geos: Dict[Tuple[int, int], Any] = {}
 
     def parse(self, segmented_addr: int, **kwargs: Any) -> str:
         sTxt = kwargs.get("txt")
@@ -302,7 +302,7 @@ class GeoProcessor(BaseProcessor):
 
         # Check database for already assigned name for this exact address + segment load
         if self.ctx.db and db_key in self.ctx.db.geos:
-            return self.ctx.db.geos[db_key].name
+            return self.ctx.db.geos[db_key]
 
         offset = offset_from_segment_addr(segmented_addr)
         cache_key = (offset, start)
@@ -367,10 +367,14 @@ class GeoProcessor(BaseProcessor):
 
         if self.ctx.db:
             self.ctx.db.geos[db_key] = GeoRecord(
-                seg_addr=segmented_addr, name=final_name, commands=commands_ir
+                seg_addr=segmented_addr,
+                name=final_name,
+                commands=commands_ir,
+                location=self.ctx.level_area,
             )
-        self.parsed_geos[cache_key] = final_name
-        return final_name
+            self.ctx.db.set_symbol(segmented_addr, final_name, "GeoLayout")
+        self.parsed_geos[cache_key] = self.ctx.db.geos[db_key] if self.ctx.db else final_name
+        return self.parsed_geos[cache_key]
 
     def serialize(self, record: GeoRecord) -> str:
         output = f"const GeoLayout {record.name}[] = {{\n"
@@ -404,8 +408,8 @@ def parse_geo_layout(segmented_addr, sTxt, indent=0, context_prefix=None, is_lev
 
 
 def G_B_L(ls, i, s, c):
-    name = get_geo_processor().parse(ls[1], txt=s, indent=i, context_prefix=c)
-    return CommandIR(0x00, [name], name="GEO_BRANCH_AND_LINK"), False, i
+    geo_rec = get_geo_processor().parse(ls[1], txt=s, indent=i, context_prefix=c)
+    return CommandIR(0x00, [geo_rec], name="GEO_BRANCH_AND_LINK"), False, i
 
 
 def G_END(ls, i, s, c):
@@ -414,8 +418,8 @@ def G_END(ls, i, s, c):
 
 def G_BRANCH(ls, i, s, c):
     arg = (ls[0] >> 16) & 0xFF
-    name = get_geo_processor().parse(ls[1], txt=s, indent=i, context_prefix=c)
-    return CommandIR(0x02, [arg, name], name="GEO_BRANCH"), arg != 1, i
+    geo_rec = get_geo_processor().parse(ls[1], txt=s, indent=i, context_prefix=c)
+    return CommandIR(0x02, [arg, geo_rec], name="GEO_BRANCH"), arg != 1, i
 
 
 def G_RET(ls, i, s, c):

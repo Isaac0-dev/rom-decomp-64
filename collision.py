@@ -389,7 +389,7 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
 class CollisionProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
-        self.parsed_collisions: Dict[Tuple[int, int], str] = {}
+        self.parsed_collisions: Dict[Tuple[int, int], Any] = {}
 
     def parse(self, segmented_addr: int, **kwargs: Any) -> str:
         context_prefix = kwargs.get("context_prefix")
@@ -405,7 +405,7 @@ class CollisionProcessor(BaseProcessor):
 
         # Check database for already assigned name
         if self.ctx.db and db_key in self.ctx.db.collisions:
-            return self.ctx.db.collisions[db_key].name
+            return self.ctx.db.collisions[db_key]
 
         offset = offset_from_segment_addr(segmented_addr)
         key = (offset, start)
@@ -425,13 +425,18 @@ class CollisionProcessor(BaseProcessor):
             name = f"{context_prefix}_collision_0x{segmented_addr:08X}"
 
         if self.ctx.db:
-            self.ctx.db.collisions[db_key] = CollisionRecord(
-                seg_addr=segmented_addr, name=name, commands=commands_ir
+            record = CollisionRecord(
+                seg_addr=segmented_addr,
+                name=name,
+                commands=commands_ir,
+                location=self.ctx.level_area,
             )
+            self.ctx.db.collisions[db_key] = record
+            self.ctx.db.set_symbol(segmented_addr, name, "Collision")
 
-        self.parsed_collisions[key] = name
+        self.parsed_collisions[key] = record if self.ctx.db else name
         ctx.last_collision_surface_count = surface_count
-        return name
+        return self.parsed_collisions[key]
 
     def serialize(self, record: CollisionRecord) -> str:
         output = f"const Collision {record.name}[] = " + "{\n"

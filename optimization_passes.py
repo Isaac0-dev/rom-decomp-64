@@ -1,32 +1,75 @@
 from rom_database import RomDatabase, CommandIR
-from typing import List, Dict, Any, Optional
+from typing import List
+
 
 def eliminate_degenerate_triangles(commands: List[CommandIR]) -> List[CommandIR]:
     """Remove triangles where at least two indices are the same."""
     new_cmds = []
     for cmd in commands:
         if cmd.name == "gsSP1Triangle":
-            params = cmd.params[0]
-            indices = params.get("indices", [0, 0, 0])
-            if indices[0] == indices[1] or indices[1] == indices[2] or indices[0] == indices[2]:
+            params = cmd.params[0].params
+            if "indices" in params:
+                v0, v1, v2 = params["indices"]
+            else:
+                v0 = params.get("v0", 0)
+                v1 = params.get("v1", 0)
+                v2 = params.get("v2", 0)
+
+            if v0 == v1 or v1 == v2 or v0 == v2:
                 continue
         elif cmd.name == "gsSP2Triangles":
-            params = cmd.params[0]
-            indices = params.get("indices", [0, 0, 0, 0, 0, 0])
-            deg1 = indices[0] == indices[1] or indices[1] == indices[2] or indices[0] == indices[2]
-            deg2 = indices[3] == indices[4] or indices[4] == indices[5] or indices[3] == indices[5]
+            params = cmd.params[0].params
+            if "indices" in params:
+                idx = params["indices"]
+                v00, v01, v02, v10, v11, v12 = idx[0], idx[1], idx[2], idx[3], idx[4], idx[5]
+            else:
+                v00 = params.get("v00", 0)
+                v01 = params.get("v01", 0)
+                v02 = params.get("v02", 0)
+                v10 = params.get("v10", 0)
+                v11 = params.get("v11", 0)
+                v12 = params.get("v12", 0)
+
+            deg1 = v00 == v01 or v01 == v02 or v00 == v02
+            deg2 = v10 == v11 or v11 == v12 or v10 == v12
+
             if deg1 and deg2:
                 continue
             if deg1:
                 # Convert to 1 triangle (the second one)
-                params["indices"] = indices[3:6]
+                if "indices" in params:
+                    params["indices"] = [v10, v11, v12]
+                else:
+                    params["v0"] = v10
+                    params["v1"] = v11
+                    params["v2"] = v12
+                    params.pop("v00", None)
+                    params.pop("v01", None)
+                    params.pop("v02", None)
+                    params.pop("v10", None)
+                    params.pop("v11", None)
+                    params.pop("v12", None)
+                    params["flag"] = params.get("flag1", 0)
                 cmd.name = "gsSP1Triangle"
             elif deg2:
                 # Convert to 1 triangle (the first one)
-                params["indices"] = indices[0:3]
+                if "indices" in params:
+                    params["indices"] = [v00, v01, v02]
+                else:
+                    params["v0"] = v00
+                    params["v1"] = v01
+                    params["v2"] = v02
+                    params.pop("v00", None)
+                    params.pop("v01", None)
+                    params.pop("v02", None)
+                    params.pop("v10", None)
+                    params.pop("v11", None)
+                    params.pop("v12", None)
+                    params["flag"] = params.get("flag0", 0)
                 cmd.name = "gsSP1Triangle"
         new_cmds.append(cmd)
     return new_cmds
+
 
 def batch_tri2(commands: List[CommandIR]) -> List[CommandIR]:
     """Convert pairs of consecutive gsSP1Triangle into gsSP2Triangles."""
@@ -35,20 +78,45 @@ def batch_tri2(commands: List[CommandIR]) -> List[CommandIR]:
     while i < len(commands):
         cmd = commands[i]
         if cmd.name == "gsSP1Triangle" and i + 1 < len(commands):
-            next_cmd = commands[i+1]
+            next_cmd = commands[i + 1]
             if next_cmd.name == "gsSP1Triangle":
                 # Combine them
-                indices1 = cmd.params[0].get("indices", [0, 0, 0])
-                indices2 = next_cmd.params[0].get("indices", [0, 0, 0])
+                p1 = cmd.params[0].params
+                p2 = next_cmd.params[0].params
+
+                if "indices" in p1:
+                    v00, v01, v02 = p1["indices"]
+                    flag0 = 0
+                else:
+                    v00 = p1.get("v0", 0)
+                    v01 = p1.get("v1", 0)
+                    v02 = p1.get("v2", 0)
+                    flag0 = p1.get("flag", 0)
+
+                if "indices" in p2:
+                    v10, v11, v12 = p2["indices"]
+                    flag1 = 0
+                else:
+                    v10 = p2.get("v0", 0)
+                    v11 = p2.get("v1", 0)
+                    v12 = p2.get("v2", 0)
+                    flag1 = p2.get("flag", 0)
+
+                from display_list import GfxCommand
+
+                batch_gfx_cmd = GfxCommand(
+                    w0=cmd.params[0].w0,
+                    w1=next_cmd.params[0].w1,
+                    params={
+                        "v00": v00, "v01": v01, "v02": v02, "flag0": flag0,
+                        "v10": v10, "v11": v11, "v12": v12, "flag1": flag1,
+                    },
+                )
                 batch_ir = CommandIR(
-                    opcode=0xB1, # G_TRI2
-                    params=[{
-                        "indices": indices1 + indices2,
-                        "w0": cmd.params[0].get("w0", 0), # Not perfect but G_TRI2 uses both
-                        "w1": next_cmd.params[0].get("w1", 0)
-                    }],
+                    opcode=0xB1,  # G_TRI2
+                    params=[batch_gfx_cmd],
                     address=cmd.address,
-                    name="gsSP2Triangles"
+                    name="gsSP2Triangles",
                 )
                 new_cmds.append(batch_ir)
                 i += 2
@@ -56,6 +124,7 @@ def batch_tri2(commands: List[CommandIR]) -> List[CommandIR]:
         new_cmds.append(cmd)
         i += 1
     return new_cmds
+
 
 def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
     """Remove redundant gsDP state changes."""
@@ -71,7 +140,7 @@ def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
     last_other_mode_h = None
 
     # We reset state tracking on jump/branch list or end dl to be safe
-    reset_opcodes = {0x06, 0xB8} # GS_DISPLAY_LIST, GS_END_DL
+    reset_opcodes = {0x06, 0xB8}  # GS_DISPLAY_LIST, GS_END_DL
 
     for cmd in commands:
         if cmd.opcode in reset_opcodes:
@@ -87,60 +156,57 @@ def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
             new_cmds.append(cmd)
             continue
 
+        w0 = cmd.params[0].w0
+        w1 = cmd.params[0].w1
+
         if cmd.name == "gsDPSetCombineMode":
-            w0 = cmd.params[0].get("w0")
-            w1 = cmd.params[0].get("w1")
             if w0 == last_combine_w0 and w1 == last_combine_w1:
                 continue
             last_combine_w0 = w0
             last_combine_w1 = w1
 
         elif cmd.name == "gsDPSetEnvColor":
-            val = cmd.params[0].get("w1")
-            if val == last_env_color:
+            if w1 == last_env_color:
                 continue
-            last_env_color = val
+            last_env_color = w1
 
         elif cmd.name == "gsDPSetPrimColor":
             # Prim color also has w0 flags (m, l)
-            w0 = cmd.params[0].get("w0") & 0xFFFF
-            w1 = cmd.params[0].get("w1")
+            w0 = w0 & 0xFFFF
             val = (w0, w1)
             if val == last_prim_color:
                 continue
             last_prim_color = val
 
         elif cmd.name == "gsDPSetFogColor":
-            val = cmd.params[0].get("w1")
-            if val == last_fog_color:
+            if w1 == last_fog_color:
                 continue
-            last_fog_color = val
+            last_fog_color = w1
 
         elif cmd.name == "gsDPSetBlendColor":
-            val = cmd.params[0].get("w1")
-            if val == last_blend_color:
+            if w1 == last_blend_color:
                 continue
-            last_blend_color = val
+            last_blend_color = w1
 
         elif cmd.name == "gsDPSetRenderMode":
-            w1 = cmd.params[0].get("w1")
             if w1 == last_render_mode:
                 continue
             last_render_mode = w1
 
         elif cmd.name == "gsDPSetOtherMode":
-            mode = cmd.params[0].get("mode") # Usually a bitmask
-            w1 = cmd.params[0].get("w1")
             # G_SETOTHERMODE_L (0xE2) or G_SETOTHERMODE_H (0xE3)
             if cmd.opcode == 0xE2:
-                if w1 == last_other_mode_l: continue
+                if w1 == last_other_mode_l:
+                    continue
                 last_other_mode_l = w1
-            else: # cmd.opcode == 0xE3
-                if w1 == last_other_mode_h: continue
+            else:  # cmd.opcode == 0xE3
+                if w1 == last_other_mode_h:
+                    continue
                 last_other_mode_h = w1
 
         new_cmds.append(cmd)
     return new_cmds
+
 
 def insert_cull_dl(commands: List[CommandIR]) -> List[CommandIR]:
     """Insert gsSPCullDisplayList for the entire vertex range if a DL uses vertices."""
@@ -151,26 +217,41 @@ def insert_cull_dl(commands: List[CommandIR]) -> List[CommandIR]:
 
     for cmd in commands:
         if cmd.name == "gsSP1Triangle":
-            idx = cmd.params[0].get("indices", [0, 0, 0])
+            params = cmd.params[0].params
+            if "indices" in params:
+                idx = params["indices"]
+            else:
+                idx = [params.get("v0", 0), params.get("v1", 0), params.get("v2", 0)]
             first_vtx = min(first_vtx, *idx)
             last_vtx = max(last_vtx, *idx)
             has_tris = True
         elif cmd.name == "gsSP2Triangles":
-            idx = cmd.params[0].get("indices", [0, 0, 0, 0, 0, 0])
+            params = cmd.params[0].params
+            if "indices" in params:
+                idx = params["indices"]
+            else:
+                idx = [
+                    params.get("v00", 0), params.get("v01", 0), params.get("v02", 0),
+                    params.get("v10", 0), params.get("v11", 0), params.get("v12", 0)
+                ]
             first_vtx = min(first_vtx, *idx)
             last_vtx = max(last_vtx, *idx)
             has_tris = True
 
     if has_tris and first_vtx <= last_vtx:
+        from display_list import GfxCommand
+
+        cull_gfx_cmd = GfxCommand(0xBE, 0, {"v0": first_vtx, "vn": last_vtx}, False)
         cull_ir = CommandIR(
-            opcode=0xBE, # G_CULLDL
-            params=[{"v0": first_vtx, "vn": last_vtx}],
+            opcode=0xBE,  # G_CULLDL
+            params=[cull_gfx_cmd],
             address=commands[0].address if commands else 0,
-            name="gsSPCullDisplayList"
+            name="gsSPCullDisplayList",
         )
         return [cull_ir] + commands
 
     return commands
+
 
 def run_model_optimization_passes(db: RomDatabase):
     """Run all optimization passes on Display Lists in the database."""

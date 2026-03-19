@@ -179,7 +179,7 @@ def _register_tex(
     if ctx.db is None:
         return
     addr = (0x02 << 24) | offset
-    ctx.db.textures[addr] = TextureRecord(
+    ctx.db.textures[name] = TextureRecord(
         addr=addr,
         phys=0,
         seg_num=2,
@@ -191,6 +191,7 @@ def _register_tex(
         name=name,
         segment_data=bytes(tex_data),
     )
+    ctx.db.set_symbol(addr, name, "Texture")
 
 
 class Segment2Processor(BaseProcessor):

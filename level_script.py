@@ -196,10 +196,8 @@ class LevelScriptProcessor(BaseProcessor):
                 record = LevelRecord(name=name, script_addr=seg_phys_start, commands=commands_ir)
                 record.history = ctx.level_script_tracker[::-1]
                 self.ctx.db.level_scripts[seg_phys_start] = record
-
-            PARSE_STATS["scripts"] += 1
-            if _current_script_had_error:
-                PARSE_STATS["scripts_with_errors"] += 1
+                self.ctx.db.set_symbol(seg_phys_start, name, "LevelScript")
+                return record
             return name
 
         except Exception as e:

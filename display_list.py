@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from segment import (
     CustomBytesIO,
     debug_print,
@@ -6,61 +7,57 @@ from segment import (
     segment_from_addr,
     where_is_segment_loaded,
 )
-from utils import DEBUG, read_int
-from typing import Any, Dict, List, Optional, Tuple
+from utils import read_int
+from typing import Any, Dict, List, Optional
 from microcode import create_microcode
 from base_processor import BaseProcessor
-from rom_database import DisplayListRecord
+from rom_database import DisplayListRecord, CommandIR
 from context import ctx
 
 current_geometry_mode: int = 0x22205
 current_microcode: Any = None
-sDisplayListHooks: List[Any] = []
 
 
-def register_display_list_hook(func: Any) -> None:
-    if func not in sDisplayListHooks:
-        sDisplayListHooks.append(func)
+@dataclass
+class GfxCommand:
+    w0: int
+    w1: int
+    params: Dict[str, Any] = field(default_factory=dict)
+    commented_out: bool = False
 
 
 class Disassembler:
     def __init__(self, sTxt: Any, context_prefix: Optional[str]) -> None:
         self.sTxt = sTxt
         self.context_prefix = context_prefix
-        self.output = ""
-        self.commands: List[Dict[str, Any]] = []
+        self.commands: List[CommandIR] = []
         self.end_dl = False
         self.branch_taken = False
         self.current_pos = 0
         self.current_w0 = 0
         self.current_w1 = 0
-        self.current_line: Optional[str] = None
 
     def start_command(self, pos: int, w0: int, w1: int) -> None:
         self.current_pos = pos
         self.current_w0 = w0
         self.current_w1 = w1
-        self.current_line = None
 
-    def text(self, t: str) -> None:
-        self.current_line = t
+    def set_cmd(self, name: str, params: Dict[str, Any], commented_out: bool = False) -> None:
+        opcode = (self.current_w0 >> 24) & 0xFF
 
-    def set_cmd(self, name: str, params: Dict[str, Any]) -> None:
-        cmd = {"type": name, "pos": self.current_pos}
-        cmd.update(params)
-        self.commands.append(cmd)
+        gfx_cmd = GfxCommand(self.current_w0, self.current_w1, params, commented_out)
+
+        ir = CommandIR(
+            opcode=opcode,
+            params=[gfx_cmd],
+            address=self.current_pos,
+            raw_data=self.current_w0.to_bytes(4, "big") + self.current_w1.to_bytes(4, "big"),
+            name=name,
+        )
+        self.commands.append(ir)
 
     def parse_dl(self, address: int) -> str:
         return parse_display_list(address, self.sTxt, self.context_prefix)
-
-    def finish_command(self) -> None:
-        hex_str = (
-            f"/* {self.current_pos:06X} {self.current_w0:08X} {self.current_w1:08X} */".ljust(30)
-            if DEBUG
-            else "   "
-        )
-        if self.current_line:
-            self.output += f"{hex_str} {self.current_line},\n"
 
 
 def _SHIFTR(val: int, shift: int, size: int) -> int:
@@ -118,14 +115,13 @@ def parse_display_list_from_data(
             handler = current_microcode.get_handler(w0)
             dis.start_command(pos, w0, w1)
             handler(w0, w1, dis)
-            dis.finish_command()
             if (
                 dis.end_dl
                 or dis.branch_taken
                 or (hasattr(handler, "__name__") and handler.__name__ == "execute_unknown")
             ):
                 break
-        return dis.output, dis.commands
+        return dis.commands, current_microcode.__class__.__name__
     finally:
         current_microcode = old
 
@@ -136,24 +132,17 @@ def parse_display_list_from_data(
 class DisplayListProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
-        self.parsed_dls: Dict[Tuple[int, int, int], str] = {}
-        self.parsed_dl_commands_by_addr: Dict[int, List[Dict[str, Any]]] = {}
 
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[DisplayListRecord]:
         sTxt = kwargs.get("txt")
         context_prefix = kwargs.get("context_prefix")
         if not segmented_addr:
-            return "NULL"
-
-        for hook in sDisplayListHooks:
-            res = hook(segmented_addr, sTxt, context_prefix)
-            if res is not None:
-                return str(res)
+            return None
 
         seg_num = segment_from_addr(segmented_addr)
         segment_info = where_is_segment_loaded(seg_num)
         if segment_info is None:
-            return f"dl_fail_0x{segmented_addr:08X}"
+            return None
 
         start, end = segment_info
 
@@ -162,26 +151,20 @@ class DisplayListProcessor(BaseProcessor):
 
         # Check database for already assigned name for this exact address + segment load
         if self.ctx.db and db_key in self.ctx.db.display_lists:
-            return self.ctx.db.display_lists[db_key].name
-
-        if (segmented_addr, start, end) in self.parsed_dls:
-            return self.parsed_dls[(segmented_addr, start, end)]
+            return self.ctx.db.display_lists[db_key]
 
         offset = offset_from_segment_addr(segmented_addr)
         data = get_segment(seg_num)
         if data is None or offset >= len(data):
-            return "NULL"
+            return None
 
         # Assign name
         dl_name = f"dl_{segmented_addr:08X}"
         if context_prefix:
             dl_name = f"{context_prefix}_{dl_name}"
 
-        # Preventive cache entry to handle simple recursion
-        self.parsed_dls[(segmented_addr, start, end)] = dl_name
-
         forced = probe_microcode(data, offset)
-        parsed_content, commands = parse_display_list_from_data(
+        commands, ucode_name = parse_display_list_from_data(
             CustomBytesIO(data),
             offset,
             segmented_addr,
@@ -190,22 +173,32 @@ class DisplayListProcessor(BaseProcessor):
             force_microcode=forced,
         )
 
-        output_str = f"const Gfx {dl_name}[] = {{\n{parsed_content}}};\n"
-
-        if self.ctx.db:
-            self.ctx.db.display_lists[db_key] = DisplayListRecord(
-                seg_addr=segmented_addr, name=dl_name, script_text=output_str
-            )
-
-        self.parsed_dl_commands_by_addr.setdefault(segmented_addr, []).append(
-            {"start": start, "end": end, "commands": commands}
+        record = DisplayListRecord(
+            seg_addr=segmented_addr,
+            name=dl_name,
+            commands=commands,
+            microcode=ucode_name,
+            location=self.ctx.level_area,
         )
-        return dl_name
+        self.ctx.db.display_lists[db_key] = record
+        self.ctx.db.set_symbol(segmented_addr, dl_name, "Gfx")
+
+        return record
 
     def serialize(self, record: DisplayListRecord) -> str:
-        if self.ctx.txt and record.script_text:
-            self.ctx.txt.write(self.ctx, "dl", record.name, record.script_text)
-        return record.script_text
+        from serialization_helpers import serialize_gfx_layout
+
+        # Use the structured CommandIR for serialization if available
+        if record.commands:
+            output_str = serialize_gfx_layout(
+                record.name, record.commands, self.ctx.db, record.location, record.microcode
+            )
+        else:
+            output_str = record.script_text
+
+        if self.ctx.txt and output_str:
+            self.ctx.txt.write(self.ctx, "dl", record.name, output_str)
+        return output_str
 
 
 _dl_processor = None
@@ -220,11 +213,3 @@ def get_display_list_processor():
 
 def parse_display_list(addr, txt, context_prefix=None):
     return get_display_list_processor().parse(addr, txt=txt, context_prefix=context_prefix)
-
-
-def get_display_list_commands(addr):
-    p = get_display_list_processor()
-    # Note: this returns the most recent one parsed for this address, which is usually correct in current context
-    if addr in p.parsed_dl_commands_by_addr and p.parsed_dl_commands_by_addr[addr]:
-        return p.parsed_dl_commands_by_addr[addr][-1]["commands"]
-    return None
