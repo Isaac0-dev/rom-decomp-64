@@ -108,8 +108,14 @@ def batch_tri2(commands: List[CommandIR]) -> List[CommandIR]:
                     w0=cmd.params[0].w0,
                     w1=next_cmd.params[0].w1,
                     params={
-                        "v00": v00, "v01": v01, "v02": v02, "flag0": flag0,
-                        "v10": v10, "v11": v11, "v12": v12, "flag1": flag1,
+                        "v00": v00,
+                        "v01": v01,
+                        "v02": v02,
+                        "flag0": flag0,
+                        "v10": v10,
+                        "v11": v11,
+                        "v12": v12,
+                        "flag1": flag1,
                     },
                 )
                 batch_ir = CommandIR(
@@ -231,8 +237,12 @@ def insert_cull_dl(commands: List[CommandIR]) -> List[CommandIR]:
                 idx = params["indices"]
             else:
                 idx = [
-                    params.get("v00", 0), params.get("v01", 0), params.get("v02", 0),
-                    params.get("v10", 0), params.get("v11", 0), params.get("v12", 0)
+                    params.get("v00", 0),
+                    params.get("v01", 0),
+                    params.get("v02", 0),
+                    params.get("v10", 0),
+                    params.get("v11", 0),
+                    params.get("v12", 0),
                 ]
             first_vtx = min(first_vtx, *idx)
             last_vtx = max(last_vtx, *idx)

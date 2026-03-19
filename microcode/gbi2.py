@@ -3,6 +3,7 @@ from gbi_defines import G_DL_PUSH, G_GEOMETRYMODE_FLAGS, get_named_flags
 import vertices
 import lights
 from texture import set_tile_size
+from utils import debug_print
 
 
 class GBI2(GBI1):

@@ -15,6 +15,7 @@ from gbi_defines import (
 import vertices
 from typing import Dict, cast
 from texture import set_tile_size
+from utils import debug_print
 
 
 class GBI1(Microcode):
@@ -168,7 +169,9 @@ class GBI1(Microcode):
                     # Split Lights2 into Lights1 and Light
                     l1_record = lights.parse_light(address, 24, dis.sTxt, dis.context_prefix)
                     l2_record = lights.parse_light(address + 24, 16, dis.sTxt, dis.context_prefix)
-                    dis.set_cmd("gsSPSetLights1", {"light1": l1_record}, commented_out=l1_record is None)
+                    dis.set_cmd(
+                        "gsSPSetLights1", {"light1": l1_record}, commented_out=l1_record is None
+                    )
                     dis.set_cmd(
                         "gsSPLight",
                         {"light": l2_record, "idx": light_idx + 2},
@@ -178,7 +181,11 @@ class GBI1(Microcode):
                 elif length == 24:
                     # Standard Lights1 (Ambient + Light)
                     light_record = lights.parse_light(address, length, dis.sTxt, dis.context_prefix)
-                    dis.set_cmd("gsSPSetLights1", {"light": light_record}, commented_out=light_record is None)
+                    dis.set_cmd(
+                        "gsSPSetLights1",
+                        {"light": light_record},
+                        commented_out=light_record is None,
+                    )
                 else:
                     # One light or ambient on it's own
                     light_record = lights.parse_light(address, length, dis.sTxt, dis.context_prefix)
