@@ -1,5 +1,5 @@
 from .gbi1 import GBI1
-from gbi_defines import G_DL_PUSH, G_GEOMETRYMODE_FLAGS, get_named_flags
+from gbi_defines import G_DL_PUSH, G_GEOMETRYMODE_FLAGS_GBI2, get_named_flags
 import vertices
 import lights
 from texture import set_tile_size
@@ -289,8 +289,8 @@ class GBI2(GBI1):
         display_list.current_geometry_mode |= set_val
 
         if dis:
-            clr_flags = get_named_flags((~clr) & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS)
-            set_flags = get_named_flags(set_val & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS)
+            clr_flags = get_named_flags((~clr) & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS_GBI2)
+            set_flags = get_named_flags(set_val & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS_GBI2)
             dis.set_cmd("gsSPGeometryMode", {"clr": clr_flags, "set": set_flags})
 
     def execute_rdp_half_1(self, cmd0, cmd1, dis):

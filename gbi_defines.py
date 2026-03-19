@@ -404,7 +404,34 @@ G_MOVEWORD_INDICES = {
 }
 
 # G_GEOMETRYMODE
-G_GEOMETRYMODE_FLAGS = {
+G_GEOMETRYMODE_FLAGS_GBI1 = {
+    0x000001: "G_ZBUFFER",
+    0x000002: "G_TEXTURE_ENABLE",
+    0x000004: "G_SHADE",
+    # 0x000008: "<unused>",
+    # 0x000010: "<unused>",
+    # 0x000020: "<unused>",
+    0x000040: "G_FRESNEL_COLOR_EXT",
+    0x000080: "G_PACKED_NORMALS_EXT",
+    # 0x000100: "<unused>",
+    0x000200: "G_SHADING_SMOOTH",
+    # 0x000400: "<unused>",
+    0x000800: "G_LIGHT_MAP_EXT",
+    0x001000: "G_CULL_FRONT",
+    0x002000: "G_CULL_BACK",
+    0x003000: "G_CULL_BOTH",
+    0x004000: "G_LIGHTING_ENGINE_EXT",
+    # 0x008000: "<unused>",
+    0x010000: "G_FOG",
+    0x020000: "G_LIGHTING",
+    0x040000: "G_TEXTURE_GEN",
+    0x080000: "G_TEXTURE_GEN_LINEAR",
+    0x100000: "G_LOD",
+    # 0x200000: "<unused>",
+    0x400000: "G_FRESNEL_ALPHA_EXT",
+    0x800000: "G_CLIPPING",
+}
+G_GEOMETRYMODE_FLAGS_GBI2 = {
     0x000001: "G_ZBUFFER",
     # 0x000002: "<unused>",
     0x000004: "G_SHADE",
@@ -416,6 +443,7 @@ G_GEOMETRYMODE_FLAGS = {
     # 0x000100: "<unused>",
     0x000200: "G_CULL_FRONT",
     0x000400: "G_CULL_BACK",
+    0x000600: "G_CULL_BOTH",
     0x000800: "G_LIGHT_MAP_EXT",
     # 0x001000: "<unused>",
     # 0x002000: "<unused>",

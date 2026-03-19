@@ -1,7 +1,7 @@
 from .base import Microcode
 from gbi_defines import (
     G_DL_PUSH,
-    G_GEOMETRYMODE_FLAGS,
+    G_GEOMETRYMODE_FLAGS_GBI1,
     G_MOVEWORD_INDICES,
     G_MTX_LOAD,
     G_MTX_PROJECTION,
@@ -91,7 +91,7 @@ class GBI1(Microcode):
         mask = cmd1
         display_list.current_geometry_mode &= ~mask
         if dis:
-            flags = get_named_flags(mask & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS)
+            flags = get_named_flags(mask & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS_GBI1)
             dis.set_cmd("gsSPClearGeometryMode", {"flags": flags})
 
     def execute_set_geometry_mode(self, cmd0, cmd1, dis):
@@ -100,7 +100,7 @@ class GBI1(Microcode):
         mask = cmd1
         display_list.current_geometry_mode |= mask
         if dis:
-            flags = get_named_flags(mask & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS)
+            flags = get_named_flags(mask & 0x00FFFFFF, G_GEOMETRYMODE_FLAGS_GBI1)
             dis.set_cmd("gsSPSetGeometryMode", {"flags": flags})
 
     def execute_sp_noop(self, cmd0, cmd1, dis):

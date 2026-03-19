@@ -467,7 +467,7 @@ def G_ZBUF(ls, i, s, c):
 
 def G_RANGE(ls, i, s, c):
     min_d, max_d = CMD_HH_unpack(ls[1])
-    return CommandIR(0x0D, [min_d, max_d], name="GEO_RENDER_RANGE"), False, i
+    return CommandIR(0x0D, [to_signed16(min_d), to_signed16(max_d)], name="GEO_RENDER_RANGE"), False, i
 
 
 def G_SWITCH(ls, i, s, c):
