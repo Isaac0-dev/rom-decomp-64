@@ -14,13 +14,13 @@ from utils import debug_print, find_all_needles_in_haystack, read_int, get_rom
 # LunaBank id -> coop ext bank id
 # thanks to Fearl for the research on this
 INSTRUMENT_MAP = {
-    # 0x00: None, # Accordion -> Broken, no obvious replacement
+    0x00: 0xCB,  # Accordion
     0x01: 0x5C,  # Slap Bass
     0x02: 0x5E,  # Clavinet or Electric Guitar
     0x03: 0x25,  # Electric Piano
-    # 0x04: None, # Piano -> Broken, No obvious replacement
+    0x04: 0xC9,  # Piano
     0x05: 0x03,  # French Horn
-    # 0x06: None, # Pan Flute -> Broken, no obvious replacement
+    0x06: 0xC6,  # Pan Flute
     0x07: 0x4B,  # Strings
     0x08: 0x00,  # Nylon Guitar
     0x09: 0x06,  # Jingle Bells or Sleigh Bells
@@ -55,8 +55,8 @@ INSTRUMENT_MAP = {
     0x26: 0x1A,  # Steel Guitar or Bright Piano
     0x27: 0x85,  # "Pah" (Maybe Crash)
     0x28: 0x4D,  # Snow Accordion
-    0x29: 0x0D,  # Synth Bass broken -> def to Rhodes Bass
-    # 0x2A: None, # Lead Square -> Broken, no obvious replacement
+    0x29: 0x5C,  # Synth Bass
+    0x2A: 0x92,  # Lead Square
     0x2B: 0x12,  # Military Snare
     0x2C: 0x2B,  # Trumpet
     0x2D: 0x31,  # Timpani
@@ -70,6 +70,44 @@ INSTRUMENT_MAP = {
     0x81: 0x81,  # Triangle Wave
     0x82: 0x82,  # Sine Wave
     0x83: 0x83,  # Step Wave
+}
+
+
+vanilla_sequence_hashes = {
+    1: 'abb9007a6ce60bc2e2dcddf548e2da40858e0038',
+    2: '5d3e9aa1340c36ddc5dccc480df65c703cbe4909',
+    3: '4c125da6bb807616f29b4b5c5cf6a530ca5fc9f2',
+    4: 'e138b3a027dc41605265a188661e7302e4bb9e93',
+    5: '910f27ef9ba22ae4e1c2235dc52583d0856e8ac0',
+    6: '788cd6cf0e2d90853d1b3f95d81b74472e2b3c88',
+    7: '435eea2e1a07ddb6280fa3bceda80c29b05d6c68',
+    8: '606db3950f0d0771f2b4d906d29e8a934c2a4fe0',
+    9: '92d0aa28455078beea35e39f3998016e8ae731ba',
+    10: 'a8d1c980a3a5ba52d0e877d6410fc6f411fd63a5',
+    11: 'c5efe470c8d366afbdfa01c6ca3e4ee4157ff34e',
+    12: 'acdf8f571f419c84eba70c675e2cf60c11140936',
+    13: '29a528bd0f9b42d1dd823110834f09b5bb495e08',
+    14: '8e93f9cc58e6630ed9e74403da3c09cdcdd3ba64',
+    15: 'be5d75e8eb219d16e77289ff442edccdabcd6bb9',
+    16: 'f137fd81f7e71e52ab0e7879f859699cb29d4b3e',
+    17: 'f9e12539e874da777be1e26e0c4d55c0715f5d7c',
+    18: '9d8a60f52d0b0128da293b3ec1ea430d173b0ef6',
+    19: 'b4795be2f0dc74038dd0e0d1daa8109355421bd3',
+    20: '1b668925e8d69dc4107f29a08852e41bcb056cc7',
+    21: 'fae790d600da008b45e5ad172f4298b7bf5effde',
+    22: '9c029a7fcf5dafa3eb6c0c9c2c2b84330a0cd586',
+    23: 'f9cf422a0979982b496911aa74970534afbb1bbe',
+    24: '2a2f0122850f9f551c3702d75a8846520678d84e',
+    25: '4feb1ffe71a6a77034ed050b0b60b685cf72a0ca',
+    26: '9f935ce1432ec2b993a8928f486afce79ef3b6ec',
+    27: '5c5f5a7e4743b713b0991d6fff1dc3ab143b072c',
+    28: 'dbe738eca043c9f8300674d12254e0cc55413611',
+    29: 'd95c14f8535b5048a43dadc5edd18b45314be7d0',
+    30: 'd7694bb40a27f548b40a0bf5a682ac611f37c46d',
+    31: 'cc78c74ce85f3f40470ba185d66f543e7103deaf',
+    32: 'c7deff79b3f8cd7d90fe60e1d79479bc9118aae9',
+    33: '1b609f2740262e6f16aee429bccfa23a9ba0e240',
+    34: 'eb4b9d1e736048b3b3d94f94b8969f32af5686c1',
 }
 
 
@@ -334,7 +372,6 @@ class AudioProcessor(BaseProcessor):
         rom_bytes = rom.getvalue()
         bank_source = detect_bank_source(rom_bytes, seq_count, header_offset)
 
-        lua_lines: List[str] = []
         count = 0
 
         for i in range(seq_count):
@@ -363,6 +400,10 @@ class AudioProcessor(BaseProcessor):
             rom.seek(abs_offset)
             data = rom.read(length)
 
+            # Don't dump vanilla sm64 sequences
+            if hashlib.sha1(data).hexdigest() == vanilla_sequence_hashes.get(i):
+                continue
+
             bank_id = get_bank_id(rom_bytes, bank_source, i)
             volume = 75
             seq_name = f"seq_{i:02X}"
@@ -383,19 +424,13 @@ class AudioProcessor(BaseProcessor):
                 data = mut_data
                 bank_id = 0x2A
 
-            lua_lines.append(
-                f"smlua_audio_utils_replace_sequence("
-                f"0x{i:02X}, 0x{bank_id:02X}, {volume}, '{seq_name}')\n"
-            )
-
             if self.db is not None:
                 self.db.audio.sequences.append(
-                    AudioSequenceRecord(seq_id=i, bank_id=bank_id, data=bytes(data))
+                    AudioSequenceRecord(
+                        seq_id=i, bank_id=bank_id, volume=volume, name=seq_name, data=bytes(data)
+                    )
                 )
             count += 1
-
-        if self.db is not None:
-            self.db.audio.lua_lines = lua_lines
 
         print(f"Stored {count} sequences for deferred write.")
 
@@ -409,13 +444,19 @@ class AudioProcessor(BaseProcessor):
         seq_dir = os.path.join(base_path, "sound")
         os.makedirs(seq_dir, exist_ok=True)
 
+        lua_lines: List[str] = []
         for seq_rec in record.sequences:
-            out_path = os.path.join(seq_dir, f"seq_{seq_rec.seq_id:02X}.m64")
+            out_path = os.path.join(seq_dir, f"{seq_rec.name}.m64")
             with open(out_path, "wb") as f:
                 f.write(seq_rec.data)
 
-        if record.lua_lines and self.txt:
-            self.txt.write_lua(record.lua_lines, "music.lua")
+            lua_lines.append(
+                f"smlua_audio_utils_replace_sequence("
+                f"0x{seq_rec.seq_id:02X}, 0x{seq_rec.bank_id:02X}, {seq_rec.volume}, '{seq_rec.name}')\n"
+            )
+
+        if self.txt:
+            self.txt.write_lua(lua_lines, "music.lua")
 
         print(f"Wrote {len(record.sequences)} sequences and music.lua.")
         return ""

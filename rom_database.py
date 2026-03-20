@@ -354,6 +354,8 @@ class AudioSequenceRecord:
 
     seq_id: int = 0
     bank_id: int = 0
+    volume: int = 0
+    name: str = ""
     data: bytes = b""
 
 
