@@ -552,14 +552,11 @@ def AREA(values):
     # Update context prefix for children (DLs, Geos, etc)
     # If we have a level name (e.g. 'bbh'), prefix becomes 'bbh_area_1'
     if ctx.current_context_prefix:
-        from utils import level_name_to_int_lookup
-
-        # Check if it already has the level name but not the area
-        parts = ctx.current_context_prefix.split("_")
-        if parts[0] in level_name_to_int_lookup and "area" not in ctx.current_context_prefix:
-            ctx.current_context_prefix = f"{parts[0]}_{area_label}"
-        else:
-            ctx.current_context_prefix = f"{ctx.current_context_prefix}_{area_label}"
+        prefix = area_label
+        if ctx.curr_level != -1:
+            from utils import level_num_to_str
+            prefix = f"{level_num_to_str[ctx.curr_level]}_{area_label}"
+        ctx.current_context_prefix = prefix
     else:
         ctx.current_context_prefix = area_label
 
