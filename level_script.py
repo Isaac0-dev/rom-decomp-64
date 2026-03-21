@@ -222,10 +222,15 @@ class LevelScriptProcessor(BaseProcessor):
         for ir in record.commands:
             prefix = "    " * (ir.indent + 1)
             comment = ir.comment if hasattr(ir, "comment") else ""
+
+            # Hex dump of the command bytes
             hex_words = [ir.raw_data[i:i+4].hex().upper() for i in range(0, len(ir.raw_data), 4)]
-            comment = f"/* {' '.join(hex_words)} */ " + comment
+            bytes_comment = f"/* {' '.join(hex_words)} */ "
+            chars = ((0x18 // 4) * (8 + 1)) + 2 + 4 # 6 words, 2 spaces and 4 special chars
+            prefix += " " * int((chars - len(bytes_comment)) + 4)
+
             params_str = ", ".join(map(str, ir.params))
-            output += f"{prefix}{comment}{ir.name}({params_str}),\n"
+            output += f"{bytes_comment}{prefix}{comment}{ir.name}({params_str}),\n"
         output += "};\n"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "script", record.name, output)
