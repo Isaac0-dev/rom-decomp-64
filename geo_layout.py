@@ -325,7 +325,7 @@ class GeoProcessor(BaseProcessor):
 
         while not found_end:
             if rom.tell() + 4 > len(rom.getvalue()):
-                print(f"WARNING: Hit end of buffer at 0x{segmented_addr + rom.tell():08X}")
+                print(f"WARNING: Hit end of buffer for geo at 0x{segmented_addr + rom.tell():08X}")
                 break
 
             pos = rom.tell()
@@ -432,6 +432,17 @@ def G_OPEN(ls, i, s, c):
 
 def G_CLOSE(ls, i, s, c):
     return CommandIR(0x05, [], name="GEO_CLOSE_NODE"), False, max(0, i - 1)
+
+
+def G_ASSIGN_AS_VIEW(ls, i, s, c):
+    index = ls[0] & 0xFFFF
+    return CommandIR(0x06, [index], name="GEO_ASSIGN_AS_VIEW"), False, i
+
+
+def G_UPDATE_NODE_FLAGS(ls, i, s, c):
+    operation = ls[0] & 0xFF
+    bits = ls[0] >> 16
+    return CommandIR(0x07, [operation, bits], name="GEO_UPDATE_NODE_FLAGS"), False, i
 
 
 def G_SCREEN(ls, i, s, c):
@@ -704,6 +715,8 @@ geo_command_table: Dict[int, Dict[str, Any]] = {
     0x03: {"name": "GEO_RETURN", "func": G_RET, "size": geo_size_1},
     0x04: {"name": "GEO_OPEN_NODE", "func": G_OPEN, "size": geo_size_1},
     0x05: {"name": "GEO_CLOSE_NODE", "func": G_CLOSE, "size": geo_size_1},
+    0x06: {"name": "GEO_ASSIGN_AS_VIEW", "func": G_ASSIGN_AS_VIEW, "size": geo_size_1},
+    0x07: {"name": "GEO_UPDATE_NODE_FLAGS", "func": G_UPDATE_NODE_FLAGS, "size": geo_size_1},
     0x08: {"name": "GEO_NODE_SCREEN_AREA", "func": G_SCREEN, "size": geo_size_3},
     0x09: {"name": "GEO_NODE_ORTHO", "func": G_ORTHO, "size": geo_size_1},
     0x0A: {"name": "GEO_CAMERA_FRUSTUM", "func": G_FRUST, "size": geo_size_camera_frustum},
