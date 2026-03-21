@@ -41,6 +41,8 @@ class ExtractionContext:
     # Managed by parse_level_script: created at start, post-processed + serialized at end.
     deferred: Any = None
 
+    cmd_bytes: bytes = b""
+
     @property
     def curr_level(self) -> int:
         return self.level_area.curr_level

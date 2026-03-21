@@ -213,15 +213,17 @@ class LevelScriptProcessor(BaseProcessor):
             ctx._pending_record = None
 
     def serialize(self, record: LevelRecord) -> str:
-        history_comment = (
-            f"// {record.history}\n" if hasattr(record, "history") and record.history else ""
-        )
+        history_comment = ""
+        if hasattr(record, "history") and record.history:
+            history_comment = "// " + " -> ".join(record.history[::-1]) + "\n"
 
         output = history_comment
         output += f"const LevelScript {record.name}[] = {{\n"
         for ir in record.commands:
             prefix = "    " * (ir.indent + 1)
             comment = ir.comment if hasattr(ir, "comment") else ""
+            hex_words = [ir.raw_data[i:i+4].hex().upper() for i in range(0, len(ir.raw_data), 4)]
+            comment = f"/* {' '.join(hex_words)} */ " + comment
             params_str = ", ".join(map(str, ir.params))
             output += f"{prefix}{comment}{ir.name}({params_str}),\n"
         output += "};\n"
@@ -327,6 +329,8 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
         val = read_int(rom)
         if val is not None:
             values.append(val)
+
+    ctx.cmd_bytes = rom[prev_offset : prev_offset + (length + 1) * 4]
 
     try:
         ctx.script_cmd_history[-1].append(name)

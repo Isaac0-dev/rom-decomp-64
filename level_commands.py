@@ -41,7 +41,7 @@ def format_param_string(name, value, length):
 
 
 def format_output(cmd, params, no_print=False):
-    return CommandIR(opcode=0, params=params, name=cmd, indent=ctx.indent)
+    return CommandIR(opcode=0, params=params, name=cmd, indent=ctx.indent, raw_data=ctx.cmd_bytes)
 
 
 ###############
