@@ -14,6 +14,7 @@ from segment import (
     get_loaded_segment_numbers,
 )
 from byteio import CustomBytesIO
+import struct
 import hashlib
 from movtex import movtex_extractor
 from texture import get_current_skybox, set_current_skybox
@@ -348,6 +349,7 @@ class GeoProcessor(BaseProcessor):
                 ir, is_end, next_indent = info["func"](words, cur_indent, sTxt, context_prefix)
                 ir.address = segmented_addr + pos - offset
                 ir.indent = cur_indent
+                ir.raw_data = rom[pos:pos + size_words * 4]
                 commands_ir.append(ir)
                 cur_indent = next_indent
                 if is_end:
@@ -380,8 +382,15 @@ class GeoProcessor(BaseProcessor):
         output = f"const GeoLayout {record.name}[] = {{\n"
         for ir in record.commands:
             prefix = "    " * (ir.indent + 1)
+
+            # Hex dump of the command bytes
+            hex_words = [ir.raw_data[i:i+4].hex().upper() for i in range(0, len(ir.raw_data), 4)]
+            bytes_comment = f"/* {' '.join(hex_words)} */ "
+            chars = (5 * (8 + 1)) + 2 + 4 # 5 words, 2 spaces and 4 special chars
+            prefix += " " * int((chars - len(bytes_comment)) + 4)
+
             params_str = ", ".join(map(str, ir.params))
-            output += f"{prefix}{ir.name}({params_str}),\n"
+            output += f"{bytes_comment}{prefix}{ir.name}({params_str}),\n"
         output += "};\n"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "geo", record.name, output)
