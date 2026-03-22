@@ -555,6 +555,7 @@ def AREA(values):
         prefix = area_label
         if ctx.curr_level != -1:
             from utils import level_num_to_str
+
             prefix = f"{level_num_to_str[ctx.curr_level]}_{area_label}"
         ctx.current_context_prefix = prefix
     else:
@@ -576,7 +577,13 @@ def AREA(values):
 
 
 def END_AREA(values):
-    ctx.indent -= 1
+    if ctx.indent > 0:
+        ctx.indent -= 1
+    else:
+        print(
+            f"WARNING: closing END_AREA without an opening AREA at 0x{ctx.curr_phys:08X} "
+            "(this is bad practice and suggests a hex edited level)"
+        )
     if ctx.level_script_tracker and ctx.level_script_tracker[-1].startswith("area_"):
         ctx.level_script_tracker.pop()
     ctx.curr_area = -1

@@ -694,7 +694,6 @@ class ExtractionPipeline:
         level scripts, populating db.levels.
         """
         from utils import find_all_needles_in_haystack, debug_fail, debug_print
-        from level_script import parse_entry_script
 
         assert self.rom is not None
         assert self.txt is not None
@@ -743,7 +742,11 @@ class ExtractionPipeline:
             if end != -1:
                 debug_print(f"Found entry level script at 0x{start:08x}")
                 self.rom.seek(self._prev_offset, 0)
-                parse_entry_script(self.rom, self.txt, start, end)
+
+                from level_script import init_level_script_parsing, parse_level_script
+
+                init_level_script_parsing(self.rom, self.txt)
+                parse_level_script(start)
 
         self._status("level_scripts", "done")
 

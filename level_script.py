@@ -224,9 +224,13 @@ class LevelScriptProcessor(BaseProcessor):
             comment = ir.comment if hasattr(ir, "comment") else ""
 
             # Hex dump of the command bytes
-            hex_words = [ir.raw_data[i:i+4].hex().upper() for i in range(0, len(ir.raw_data), 4)]
-            bytes_comment = f"/* {' '.join(hex_words)} */ "
-            chars = ((0x18 // 4) * (8 + 1)) + 2 + 4 # 6 words, 2 spaces and 4 special chars
+            hex_words = [
+                ir.raw_data[i : i + 4].hex().upper() for i in range(0, len(ir.raw_data), 4)
+            ]
+            bytes_comment = f"/* 0x{ir.address:08X} :: {' '.join(hex_words)} */ "
+            chars = (
+                ((0x18 // 4) * (8 + 1)) + 2 + 4 + (5 + 8)
+            )  # 6 words, 2 spaces and 4 special chars
             prefix += " " * int((chars - len(bytes_comment)) + 4)
 
             params_str = ", ".join(map(str, ir.params))
@@ -308,7 +312,7 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
     if ctx.first_command_in_script:
         ctx.first_command_in_script = False
         ctx.first_cmd = command
-        if command == 0x3C:
+        if command == 0x3C:  # GET_OR_SET
             rom.seek(prev_offset, 0)
             pre_cmds = quick_level_script_parse(rom)
             if pre_cmds != 1:
@@ -337,6 +341,9 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
 
     ctx.cmd_bytes = rom[prev_offset : prev_offset + (length + 1) * 4]
 
+    prev_indent = ctx.indent
+    ctx.curr_phys = curr_phys
+
     try:
         ctx.script_cmd_history[-1].append(name)
         res = info["function"](values)
@@ -353,6 +360,14 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
         # The start of the block should be on the same level as commands before it
         elif name == "AREA" or name == "LOOP_BEGIN":
             indent_for_line = max(indent_for_line - 1, 0)
+        elif ctx.indent != prev_indent:
+            print(
+                f"error, some unsupported command ({name}) just changed the indentation {ctx.indent} != {prev_indent}"
+            )
+
+        if indent_for_line < 0:
+            print(f"Fail indentation assertion: {name} at 0x{curr_phys:x}")
+            indent_for_line = 0
         ir.indent = indent_for_line
 
         if ctx.deferred:
@@ -384,12 +399,12 @@ def pending_parse(start, end=-1, label=None):
         return label or f"level_script_fail_0x{start:08X}"
 
 
-def parse_level_script(rom, start_offset, segmented_addr=None, label=None):
+def parse_level_script(start_offset, segmented_addr=None, label=None):
     addr = segmented_addr if segmented_addr is not None else (0x10000000 + start_offset)
     return get_level_processor().parse(addr, label=label)
 
 
-def parse_entry_script(rom, txt, start_offset, end_offset):
+def init_level_script_parsing(rom, txt):
     ctx.rom = rom
     ctx.txt = txt
     set_rom(rom)
@@ -405,9 +420,8 @@ def parse_entry_script(rom, txt, start_offset, end_offset):
         load_segment(0x80, 0, len(rom), False)
 
     # Load the main (entry) segment as segment 16
-    # This is consistent with setup_game_memory in game_init.c (sm64 decomp)
-    load_segment(0x10, start_offset, len(rom), False)
-    parse_level_script(rom, start_offset, 0x10000000)
+    # This is similar to setup_game_memory in game_init.c (sm64 decomp)
+    load_segment(0x10, 0, len(rom), False)
 
 
 signature_table = [
@@ -548,7 +562,7 @@ def process_global_candidates(txt_override=None):
 
         if matched:
             try:
-                name = parse_level_script(None, 0, segmented_addr=segmented_addr, label=None)
+                name = parse_level_script(0, segmented_addr=segmented_addr, label=None)
                 accepted.append((segmented_addr, name))
                 if ctx.txt:
                     ctx.txt.write(

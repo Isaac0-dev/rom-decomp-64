@@ -507,9 +507,7 @@ def segment_from_addr(addr: int) -> int:
     seg = addr >> 24
     offset = addr & 0x00FFFFFF
     if seg == offset:
-        print(
-            f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}"
-        )
+        print(f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}")
     return seg
 
 
@@ -519,9 +517,7 @@ def offset_from_segment_addr(addr: int) -> int:
     seg = addr >> 24
     offset = addr & 0x00FFFFFF
     if addr >> 24 == offset:
-        print(
-            f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}"
-        )
+        print(f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}")
     return offset
 
 

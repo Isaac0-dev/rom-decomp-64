@@ -37,6 +37,8 @@ class ExtractionContext:
 
     _pending_record: Any = None
 
+    curr_phys: int = 0
+
     # Deferred output for the current level script being parsed.
     # Managed by parse_level_script: created at start, post-processed + serialized at end.
     deferred: Any = None
