@@ -92,152 +92,6 @@ class ExtractionPipeline:
         return self.pass_finalize()
 
     # ------------------------------------------------------------------
-    # Pass 7: Serialization
-    # ------------------------------------------------------------------
-
-    def pass_serialize(self) -> None:
-        """
-        Final pass: Regenerate all script text from the structured CommandIRs
-        using the processor classes, organized into the original file structure.
-        """
-        # Reset context state so that path deduction is string-based during serialization
-        ctx.curr_level = -1
-        ctx.curr_area = -1
-        ctx.current_context_prefix = None
-
-        assert self.txt is not None
-
-        from geo_layout import get_geo_processor
-        from collision import get_collision_processor
-        from behavior import get_behavior_processor
-        from display_list import get_display_list_processor
-        from level_script import get_level_processor
-        from macro_objects import get_macro_processor
-        from collections import defaultdict
-        import sys
-
-        print("Writing files to output directory...")
-
-        sys.stdout.flush()
-
-        all_symbols = []
-        filepath_to_content = defaultdict(list)
-
-        # 1. Collect Geo Layouts
-        gp = get_geo_processor()
-        for geo_rec in self.db.geos.values():
-            text = gp.serialize(geo_rec)
-            all_symbols.append(("GeoLayout", geo_rec.name))
-            path = self.txt.get_target_path(geo_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 2. Collect Collisions
-        cp = get_collision_processor()
-        for col_rec in self.db.collisions.values():
-            text = cp.serialize(col_rec)
-            all_symbols.append(("Collision", col_rec.name))
-            path = self.txt.get_target_path(col_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 2.1 Collect Rooms
-        from rooms import get_rooms_processor
-
-        rp = get_rooms_processor()
-        for room_rec in self.db.rooms.values():
-            text = rp.serialize(room_rec)
-            all_symbols.append(("Room", room_rec.name))
-            path = self.txt.get_target_path(room_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 2.2 Collect Vertices
-        from vertices import get_vertex_processor
-
-        vp = get_vertex_processor()
-        for vtx_rec in self.db.vertices.values():
-            text = vp.serialize(vtx_rec)
-            all_symbols.append(("Vtx", vtx_rec.name))
-            path = self.txt.get_target_path(vtx_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 2.3 Collect Lights
-        from lights import get_light_processor
-
-        lp_light = get_light_processor()
-        for light_rec in self.db.lights.values():
-            text = lp_light.serialize(light_rec)
-            all_symbols.append(("Lights", light_rec.name))
-            path = self.txt.get_target_path(light_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 3. Collect Display Lists
-        dp = get_display_list_processor()
-        for dl_rec in self.db.display_lists.values():
-            text = dp.serialize(dl_rec)
-            all_symbols.append(("Gfx", dl_rec.name))
-            path = self.txt.get_target_path(dl_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 4. Collect Behaviors
-        bp = get_behavior_processor()
-        for beh_rec in self.db.behaviors.values():
-            text = bp.serialize(beh_rec)
-            all_symbols.append(("BehaviorScript", beh_rec.beh_name))
-            # Behaviors traditionally go to misc/behaviors.c
-            filepath_to_content[os.path.join("misc", "behaviors.c")].append(text)
-
-        # 5. Collect Macro Objects
-        mp = get_macro_processor()
-        for macro_rec in self.db.macros.values():
-            text = mp.serialize(macro_rec)
-            all_symbols.append(("MacroObject", macro_rec.name))
-            path = self.txt.get_target_path(macro_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 6. Collect Level Scripts
-        lp = get_level_processor()
-        for script_rec in self.db.level_scripts.values():
-            text = lp.serialize(script_rec)
-            all_symbols.append(("LevelScript", script_rec.name))
-            path = self.txt.get_target_path(script_rec.name)
-            filepath_to_content[path].append(text)
-
-        # 7. Textures (segment-2 global + level textures)
-        from texture import get_texture_processor, get_skybox_processor
-
-        tp = get_texture_processor()
-        for tex_rec in self.db.textures.values():
-            text = tp.serialize(tex_rec)
-            if text:
-                all_symbols.append(("Texture", tex_rec.name))
-                # The C struct belongs in model.inc.c (or similar)
-                # We use a suffix to force _get_target_path to return the .c file
-                c_path = self.txt.get_target_path(f"{tex_rec.name}_dl")
-                filepath_to_content[c_path].append(text)
-
-        # 8. Skyboxes
-        sp = get_skybox_processor()
-        for sky_rec in self.db.skyboxes.values():
-            text = sp.serialize(sky_rec)
-            if text:
-                all_symbols.append(("Skybox", sky_rec.level_prefix))
-                # Skybox C code traditionally goes to texture.inc.c
-                path = self.txt.get_target_path(f"{sky_rec.level_prefix}_tiles_c")
-                filepath_to_content[path].append(text)
-
-        # 9. Audio sequences + music.lua
-        from audio import get_audio_processor
-
-        ap = get_audio_processor()
-        ap.serialize(self.db.audio)
-
-        # 10. Write all accumulated content to disk
-        if self.txt:
-            for path, contents in filepath_to_content.items():
-                # Join all chunks of code for this specific file
-                full_text = "\n\n".join(contents)
-                self.txt.create_file(path, full_text)
-
-    # ------------------------------------------------------------------
     # Pass 1: Initialisation
     # ------------------------------------------------------------------
 
@@ -924,6 +778,152 @@ class ExtractionPipeline:
                     dest_id = warp.get("dest_level_id")
                     if dest_id is not None and dest_id in id_to_name:
                         warp["dest_level_name"] = id_to_name[dest_id]
+
+    # ------------------------------------------------------------------
+    # Pass 7: Serialization
+    # ------------------------------------------------------------------
+
+    def pass_serialize(self) -> None:
+        """
+        Final pass: Regenerate all script text from the structured CommandIRs
+        using the processor classes, organized into the original file structure.
+        """
+        # Reset context state so that path deduction is string-based during serialization
+        ctx.curr_level = -1
+        ctx.curr_area = -1
+        ctx.current_context_prefix = None
+
+        assert self.txt is not None
+
+        from geo_layout import get_geo_processor
+        from collision import get_collision_processor
+        from behavior import get_behavior_processor
+        from display_list import get_display_list_processor
+        from level_script import get_level_processor
+        from macro_objects import get_macro_processor
+        from collections import defaultdict
+        import sys
+
+        print("Writing files to output directory...")
+
+        sys.stdout.flush()
+
+        all_symbols = []
+        filepath_to_content = defaultdict(list)
+
+        # 1. Collect Geo Layouts
+        gp = get_geo_processor()
+        for geo_rec in self.db.geos.values():
+            text = gp.serialize(geo_rec)
+            all_symbols.append(("GeoLayout", geo_rec.name))
+            path = self.txt.get_target_path(geo_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 2. Collect Collisions
+        cp = get_collision_processor()
+        for col_rec in self.db.collisions.values():
+            text = cp.serialize(col_rec)
+            all_symbols.append(("Collision", col_rec.name))
+            path = self.txt.get_target_path(col_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 2.1 Collect Rooms
+        from rooms import get_rooms_processor
+
+        rp = get_rooms_processor()
+        for room_rec in self.db.rooms.values():
+            text = rp.serialize(room_rec)
+            all_symbols.append(("Room", room_rec.name))
+            path = self.txt.get_target_path(room_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 2.2 Collect Vertices
+        from vertices import get_vertex_processor
+
+        vp = get_vertex_processor()
+        for vtx_rec in self.db.vertices.values():
+            text = vp.serialize(vtx_rec)
+            all_symbols.append(("Vtx", vtx_rec.name))
+            path = self.txt.get_target_path(vtx_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 2.3 Collect Lights
+        from lights import get_light_processor
+
+        lp_light = get_light_processor()
+        for light_rec in self.db.lights.values():
+            text = lp_light.serialize(light_rec)
+            all_symbols.append(("Lights", light_rec.name))
+            path = self.txt.get_target_path(light_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 3. Collect Display Lists
+        dp = get_display_list_processor()
+        for dl_rec in self.db.display_lists.values():
+            text = dp.serialize(dl_rec)
+            all_symbols.append(("Gfx", dl_rec.name))
+            path = self.txt.get_target_path(dl_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 4. Collect Behaviors
+        bp = get_behavior_processor()
+        for beh_rec in self.db.behaviors.values():
+            text = bp.serialize(beh_rec)
+            all_symbols.append(("BehaviorScript", beh_rec.beh_name))
+            # Behaviors traditionally go to misc/behaviors.c
+            filepath_to_content[os.path.join("misc", "behaviors.c")].append(text)
+
+        # 5. Collect Macro Objects
+        mp = get_macro_processor()
+        for macro_rec in self.db.macros.values():
+            text = mp.serialize(macro_rec)
+            all_symbols.append(("MacroObject", macro_rec.name))
+            path = self.txt.get_target_path(macro_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 6. Collect Level Scripts
+        lp = get_level_processor()
+        for script_rec in self.db.level_scripts.values():
+            text = lp.serialize(script_rec)
+            all_symbols.append(("LevelScript", script_rec.name))
+            path = self.txt.get_target_path(script_rec.name)
+            filepath_to_content[path].append(text)
+
+        # 7. Textures (segment-2 global + level textures)
+        from texture import get_texture_processor, get_skybox_processor
+
+        tp = get_texture_processor()
+        for tex_rec in self.db.textures.values():
+            text = tp.serialize(tex_rec)
+            if text:
+                all_symbols.append(("Texture", tex_rec.name))
+                # The C struct belongs in model.inc.c (or similar)
+                # We use a suffix to force _get_target_path to return the .c file
+                c_path = self.txt.get_target_path(f"{tex_rec.name}_dl")
+                filepath_to_content[c_path].append(text)
+
+        # 8. Skyboxes
+        sp = get_skybox_processor()
+        for sky_rec in self.db.skyboxes.values():
+            text = sp.serialize(sky_rec)
+            if text:
+                all_symbols.append(("Skybox", sky_rec.level_prefix))
+                # Skybox C code traditionally goes to texture.inc.c
+                path = self.txt.get_target_path(f"{sky_rec.level_prefix}_tiles_c")
+                filepath_to_content[path].append(text)
+
+        # 9. Audio sequences + music.lua
+        from audio import get_audio_processor
+
+        ap = get_audio_processor()
+        ap.serialize(self.db.audio)
+
+        # 10. Write all accumulated content to disk
+        if self.txt:
+            for path, contents in filepath_to_content.items():
+                # Join all chunks of code for this specific file
+                full_text = "\n\n".join(contents)
+                self.txt.create_file(path, full_text)
 
     # ------------------------------------------------------------------
     # Final pass: summarise + close
