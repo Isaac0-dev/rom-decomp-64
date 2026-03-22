@@ -95,7 +95,7 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
 
     addr = tex_info.addr
     if addr == 0:
-        debug_print("DEBUG: load_tlut called but tex_info.addr is 0 - TLUT load skipped")
+        debug_print("load_tlut called but tex_info.addr is 0 - TLUT load skipped")
         return
 
     # Palette is always RGBA16
@@ -118,7 +118,7 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
         return
 
     current_palette = segment_data[offset : offset + size]
-    # debug_print(f"DEBUG: TLUT loaded successfully from 0x{addr:08X}, {count} colors")
+    # debug_print(f"TLUT loaded successfully from 0x{addr:08X}, {count} colors")
 
 
 image_handlers: Dict[int, Callable[..., None]] = {

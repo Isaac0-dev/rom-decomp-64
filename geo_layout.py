@@ -3,6 +3,7 @@ from utils import (
     CMD_HH_unpack,
     CMD_HHHHHH_unpack,
     to_signed16,
+    debug_print,
 )
 from typing import Any, Dict, List, Optional, Tuple
 from context import ctx
@@ -325,15 +326,17 @@ class GeoProcessor(BaseProcessor):
 
         while not found_end:
             if rom.tell() + 4 > len(rom.getvalue()):
-                print(f"WARNING: Hit end of buffer for geo at 0x{segmented_addr + rom.tell():08X}")
+                debug_print(
+                    f"WARNING: Hit end of buffer for geo at 0x{segmented_addr + rom.tell():08X}"
+                )
                 break
 
             pos = rom.tell()
             w0 = rom.read_u32()
             opcode = (w0 >> 24) & 0xFF
             if opcode not in geo_command_table:
-                print(
-                    f"DEBUG: UNRECOGNISED GEO OP {opcode:02X} at 0x{segmented_addr + pos - offset:08X}"
+                debug_print(
+                    f"UNRECOGNISED GEO OP {opcode:02X} at 0x{segmented_addr + pos - offset:08X}"
                 )
                 break
 
@@ -354,7 +357,7 @@ class GeoProcessor(BaseProcessor):
                 if is_end:
                     found_end = True
             except Exception as e:
-                print(f"Error while parsing geo layout at 0x{segmented_addr:08X} {e}")
+                debug_print(f"Error while parsing geo layout at 0x{segmented_addr:08X} {e}")
                 break
 
         _geo_segment_stack.pop()

@@ -31,7 +31,7 @@ def register_segment_load_hook(func: Callable, run_existing: bool = True) -> Non
             try:
                 func(seg_num, seg)
             except Exception as e:
-                debug_print(f"DEBUG: segment load hook {func} failed for seg {seg_num:02X}: {e}")
+                debug_print(f"segment load hook {func} failed for seg {seg_num:02X}: {e}")
 
 
 def unregister_segment_load_hook(func: Callable) -> None:
@@ -87,16 +87,16 @@ _segment_pool: Deque[Optional[Any]] = deque()
 
 def push_pool_state() -> None:
     _segment_pool.append(None)
-    # debug_print("DEBUG: Pushed segment pool state.")
+    # debug_print("Pushed segment pool state.")
 
 
 # Pops everything from the pool
 def pop_pool_state() -> None:
     if _segment_pool:
         _segment_pool.pop()  # discard saved snapshot; keep current segments alive
-        # debug_print("DEBUG: Popped segment pool state (segments retained).")
+        # debug_print("Popped segment pool state (segments retained).")
     else:
-        debug_print("DEBUG: Segment pool is empty. Cannot pop state.")
+        debug_print("Segment pool is empty. Cannot pop state.")
 
 
 def segments_load_rom(data: CustomBytesIO) -> None:
@@ -152,11 +152,11 @@ class Segment:
 
 def find_contiguous_segment(rom_start: int) -> Optional[int]:
     global sSegments
-    # debug_print(f"DEBUG: Checking for segment ending at 0x{rom_start:X}")
+    # debug_print(f"Checking for segment ending at 0x{rom_start:X}")
     for seg_num, seg_info in sSegments.items():
         # debug_print(f"  Segment 0x{seg_num:X} ends at 0x{seg_info['end']:X}")
         if seg_info["end"] == rom_start:
-            debug_print(f"DEBUG: Found contiguous segment 0x{seg_num:X} ending at 0x{rom_start:X}")
+            debug_print(f"Found contiguous segment 0x{seg_num:X} ending at 0x{rom_start:X}")
             return seg_num
     return None
 
@@ -168,7 +168,7 @@ def append_to_segment(seg_num: int, data: bytes) -> None:
         sSegments[seg_num]["end"] += len(data)
         sSegments[seg_num]["size"] += len(data)
         debug_print(
-            f"DEBUG: Appended {len(data)} bytes to segment 0x{seg_num:X}. New length {len(sSegments[seg_num]['data'])} bytes."
+            f"Appended {len(data)} bytes to segment 0x{seg_num:X}. New length {len(sSegments[seg_num]['data'])} bytes."
         )
 
 
@@ -176,7 +176,7 @@ def alias_segment(new_seg: int, existing_seg: int) -> None:
     global sSegments
     if existing_seg in sSegments:
         sSegments[new_seg] = sSegments[existing_seg]
-        debug_print(f"DEBUG: Aliased Segment 0x{new_seg:X} to Segment 0x{existing_seg:X}")
+        debug_print(f"Aliased Segment 0x{new_seg:X} to Segment 0x{existing_seg:X}")
 
 
 def load_segment(seg_num: int, rom_start: int, rom_end: int, should_decompress: bool) -> None:
@@ -221,7 +221,7 @@ def load_segment(seg_num: int, rom_start: int, rom_end: int, should_decompress: 
         if should_decompress:
             try:
                 data = decompress_by_type(data, compression_type)
-                # debug_print(f"DEBUG: Decompressed segment 0x{seg_num:X} from {rom_end - rom_start} to {len(data)} bytes.")
+                # debug_print(f"Decompressed segment 0x{seg_num:X} from {rom_end - rom_start} to {len(data)} bytes.")
             except Exception as e:
                 debug_fail(f"ERROR: Failed to decompress segment 0x{seg_num:X}: {e}")
         else:
@@ -236,7 +236,7 @@ def load_segment(seg_num: int, rom_start: int, rom_end: int, should_decompress: 
         "size": len(data),
         "ranges": [(rom_start, rom_end)],
     }
-    # debug_print(f"DEBUG: Loaded segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
+    # debug_print(f"Loaded segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
 
     # Store in cache for reuse
     _segment_cache[key] = sSegments[seg_num]
@@ -279,7 +279,7 @@ def load_segment_append(
             "size": len(data),
             "ranges": [(rom_start, rom_end)],
         }
-        # debug_print(f"DEBUG: [strict] Loaded segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
+        # debug_print(f"[strict] Loaded segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
         for hook in list(sSegmentLoadHooks):
             hook(seg_num, sSegments[seg_num])
         return
@@ -307,7 +307,7 @@ def load_segment_append(
                 seg_info["size"] = len(seg_info["data"])
                 seg_info["end"] = seg_info["start"] + seg_info["size"]
                 seg_info["ranges"].append((rom_start, rom_end))
-                # debug_print(f"DEBUG: [extend] Appended {len(data_to_add)} bytes to segment 0x{seg_num:X}. New size: 0x{seg_info['size']:X}")
+                # debug_print(f"[extend] Appended {len(data_to_add)} bytes to segment 0x{seg_num:X}. New size: 0x{seg_info['size']:X}")
                 for hook in list(sSegmentLoadHooks):
                     hook(seg_num, seg_info)
                 return
@@ -322,7 +322,7 @@ def load_segment_append(
             "size": len(data),
             "ranges": [(rom_start, rom_end)],
         }
-        # debug_print(f"DEBUG: [extend] Loaded segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
+        # debug_print(f"[extend] Loaded segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
         for hook in list(sSegmentLoadHooks):
             hook(seg_num, sSegments[seg_num])
         return
@@ -342,7 +342,7 @@ def load_segment_append(
             sSegments[contiguous_seg] = base_seg
             sSegments[seg_num] = base_seg  # alias appended segment to the base
             # debug_print(
-            #     f"DEBUG: [hack] Appended {len(data)} bytes to contiguous segment 0x{contiguous_seg:X} "
+            #     f"[hack] Appended {len(data)} bytes to contiguous segment 0x{contiguous_seg:X} "
             #     f"for segment 0x{seg_num:X}. New size: 0x{base_seg['size']:X}")
 
             for hook in list(sSegmentLoadHooks):
@@ -359,7 +359,7 @@ def load_segment_append(
             # keep start as original, end becomes start+size
             sSegments[seg_num]["end"] = sSegments[seg_num]["start"] + sSegments[seg_num]["size"]
             sSegments[seg_num].setdefault("ranges", []).append((rom_start, rom_end))
-            # debug_print(f"DEBUG: [hack] Appended {len(data)} bytes to segment 0x{seg_num:X}. New size: 0x{sSegments[seg_num]['size']:X}")
+            # debug_print(f"[hack] Appended {len(data)} bytes to segment 0x{seg_num:X}. New size: 0x{sSegments[seg_num]['size']:X}")
         else:
             # New load
             sSegments[seg_num] = {
@@ -371,7 +371,7 @@ def load_segment_append(
                 "size": len(data),
                 "ranges": [(rom_start, rom_end)],
             }
-            # debug_print(f"DEBUG: [hack] Loaded (append-mode) segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
+            # debug_print(f"[hack] Loaded (append-mode) segment 0x{seg_num:X} from 0x{rom_start:X} to 0x{rom_end:X}, length {len(data)} bytes.")
 
         for hook in list(sSegmentLoadHooks):
             hook(seg_num, sSegments[seg_num])
@@ -388,7 +388,7 @@ def get_segment(seg_num: int) -> Optional[bytes]:
 # Create a copy of segment data that takes minimal amount of memory
 def get_segment_no_alloc(seg_num: int) -> Optional[Tuple[int, int, int]]:
     if seg_num not in sSegments:
-        debug_fail(f"DEBUG: Attempted to get no alloc unloaded segment 0x{seg_num:02X}")
+        debug_fail(f"Attempted to get no alloc unloaded segment 0x{seg_num:02X}")
         return None
     segment = sSegments[seg_num]
     return (segment["segmented_address"], segment["start"], segment["end"])

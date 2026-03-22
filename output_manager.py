@@ -100,45 +100,62 @@ class OutputManager:
         self._file_cache[filepath] = f
         return f
 
-    def write(self, ctx, type, context, content):
-        with self.lock:
-            if context is None:
-                filename = "misc.c.txt"
-                context = "misc.c.txt"
-            elif "dl" in context or "vertex" in context or "light" in context:
-                filename = "model.inc.c"
-            elif "geo" in context:
-                filename = "geo.inc.c"
-            elif "trajectory" in context:
-                filename = "trajectory.inc.c"
-            elif "collision" in context:
-                filename = "collision.inc.c"
-            elif "macro" in context:
-                filename = "macro.inc.c"
-            elif "script" in context or ("level_" in context and "_entry" in context):
-                filename = "script.c"
-            elif "room" in context:
-                filename = "room.inc.c"
-            elif "texture" in context or "segment2" in context or "font_graphics" in context:
-                filename = f"{context}.png"
-            elif "tiles_c" in context:
-                filename = "texture.inc.c"
-            else:
-                filename = "misc.c.txt"
+    def get_target_path(self, context: str, ctx=None) -> str:
+        """
+        Determines the relative output path (subfolders + filename) for
+        a given context name.
+        """
+        if context is None:
+            filename = "misc.c.txt"
+        elif "dl" in context or "vertex" in context or "light" in context:
+            filename = "model.inc.c"
+        elif "geo" in context:
+            filename = "geo.inc.c"
+        elif "trajectory" in context:
+            filename = "trajectory.inc.c"
+        elif "collision" in context:
+            filename = "collision.inc.c"
+        elif "macro" in context:
+            filename = "macro.inc.c"
+        elif "script" in context or ("level_" in context and "_entry" in context):
+            filename = "script.c"
+        elif "room" in context:
+            filename = "room.inc.c"
+        elif "texture" in context or "segment2" in context or "font_graphics" in context:
+            filename = f"{context}.png"
+        elif "tiles_c" in context:
+            filename = "texture.inc.c"
+        else:
+            filename = "misc.c.txt"
 
-            # Determine path based on level name
-            target_dir = self.misc_dir
+        # 1. Special cases for global textures/assets
+        if "skybox" in context:
+            target_dir = os.path.join("textures", "skybox_tiles")
+        elif any(
+            k in context
+            for k in [
+                "segment2",
+                "font_graphics",
+                "texture_hud_char",
+                "texture_font_char",
+                "texture_transition",
+                "texture_waterbox",
+            ]
+        ):
+            target_dir = os.path.join("textures", "segment2")
+        else:
+            # 2. Level-based routing
+            target_dir = "misc"
             found_level = False
 
-            # Optimization: check current level from ctx first
-            from utils import level_num_to_str
+            if ctx and ctx.curr_level != -1:
+                from utils import level_num_to_str
 
-            if ctx.curr_level != -1:
                 level = level_num_to_str.get(ctx.curr_level)
                 if level and (
                     context.startswith(level + "_") or context == level or f"_{level}_" in context
                 ):
-                    level_dir = os.path.join(self.levels_dir, level)
+                    level_dir = os.path.join("levels", level)
                     area_index = ctx.curr_area
                     if area_index == -1:
                         # Fallback to regex if ctx doesn't have area yet
@@ -159,7 +176,7 @@ class OutputManager:
                         or context == level
                         or f"_{level}_" in context
                     ):
-                        level_dir = os.path.join(self.levels_dir, level)
+                        level_dir = os.path.join("levels", level)
                         area_index = -1
                         m = AREA_REGEX.search(context)
                         if m:
@@ -171,19 +188,12 @@ class OutputManager:
                             target_dir = level_dir
                         break
 
-            if "skybox" in context:
-                target_dir = os.path.join(self.textures_dir, "skybox_tiles")
-            elif (
-                "segment2" in context
-                or "font_graphics" in context
-                or "texture_hud_char" in context
-                or "texture_font_char" in context
-                or "texture_transition" in context
-                or "texture_waterbox" in context
-            ):
-                target_dir = os.path.join(self.textures_dir, "segment2")
+        return os.path.join(target_dir, filename)
 
-            filepath = os.path.join(target_dir, filename)
+    def write(self, ctx, type, context, content):
+        with self.lock:
+            rel_path = self.get_target_path(context, ctx)
+            filepath = os.path.join(self.base_path, rel_path)
             f = self._get_file_handle(filepath)
 
             if isinstance(content, BytesIO):

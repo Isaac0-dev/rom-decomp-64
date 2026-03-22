@@ -19,7 +19,17 @@ logger = logging.getLogger("rom-decomp-64")
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
 logger.addHandler(console_handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
+
+
+def set_log_level(verbosity: int) -> None:
+    """Sets the global logger level based on verbosity count."""
+    if verbosity >= 2:
+        logger.setLevel(logging.DEBUG)
+    elif verbosity >= 1:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.WARNING)
 
 
 def is_debugger() -> bool:
@@ -503,24 +513,6 @@ def swap_bytes(value: int) -> int:
     return struct.unpack("<I", v1)[0]
 
 
-def segment_from_addr(addr: int) -> int:
-    seg = addr >> 24
-    offset = addr & 0x00FFFFFF
-    if seg == offset:
-        print(f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}")
-    return seg
-
-
-def offset_from_segment_addr(addr: int) -> int:
-    if addr == -1:
-        return -1
-    seg = addr >> 24
-    offset = addr & 0x00FFFFFF
-    if addr >> 24 == offset:
-        print(f"DEBUG: Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}")
-    return offset
-
-
 def find_all_needles_in_haystack(haystack: bytes, needle: bytes) -> List[int]:
     positions = []
     start = 0
@@ -587,3 +579,21 @@ def debug_error(msg: str) -> None:
     else:
         logger.error(msg)
         raise ExtractionError(msg)
+
+
+def segment_from_addr(addr: int) -> int:
+    seg = addr >> 24
+    offset = addr & 0x00FFFFFF
+    if seg == offset:
+        debug_print(f"Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}")
+    return seg
+
+
+def offset_from_segment_addr(addr: int) -> int:
+    if addr == -1:
+        return -1
+    seg = addr >> 24
+    offset = addr & 0x00FFFFFF
+    if addr >> 24 == offset:
+        debug_print(f"Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}")
+    return offset

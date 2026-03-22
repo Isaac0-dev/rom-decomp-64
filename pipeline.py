@@ -95,80 +95,6 @@ class ExtractionPipeline:
     # Pass 7: Serialization
     # ------------------------------------------------------------------
 
-    def _get_target_path(self, context: str) -> str:
-        """
-        Determines the relative output path for a given context name.
-        Replicates the logic from the old OutputManager.write.
-        """
-        from utils import level_name_to_int_lookup
-
-        # 1. Determine the filename based on context clues
-        if context is None:
-            filename = "misc.c.txt"
-        elif "dl" in context or "vertex" in context or "light" in context:
-            filename = "model.inc.c"
-        elif "geo" in context:
-            filename = "geo.inc.c"
-        elif "trajectory" in context:
-            filename = "trajectory.inc.c"
-        elif "collision" in context:
-            filename = "collision.inc.c"
-        elif "macro" in context:
-            filename = "macro.inc.c"
-        elif "script" in context or ("level_" in context and "_entry" in context):
-            filename = "script.c"
-        elif "room" in context:
-            filename = "room.inc.c"
-        elif "texture" in context or "segment2" in context or "font_graphics" in context:
-            filename = f"{context}.png"
-        elif "tiles_c" in context:
-            filename = "texture.inc.c"
-        else:
-            filename = "misc.c.txt"
-
-        # 2. Determine the directory
-        target_dir = "misc"
-
-        # Special cases for textures
-        if "skybox" in context:
-            target_dir = os.path.join("textures", "skybox_tiles")
-        elif any(
-            k in context
-            for k in [
-                "segment2",
-                "font_graphics",
-                "texture_hud_char",
-                "texture_font_char",
-                "texture_transition",
-                "texture_waterbox",
-            ]
-        ):
-            target_dir = os.path.join("textures", "segment2")
-        else:
-            # Level-based routing
-            for level in level_name_to_int_lookup:
-                if context.startswith(level + "_") or context == level or f"_{level}_" in context:
-                    level_dir = os.path.join("levels", level)
-
-                    # Area detection
-                    area_index = -1
-                    parts = context.split("_")
-                    for i, part in enumerate(parts):
-                        if part == "area" and i + 1 < len(parts):
-                            try:
-                                area_index = int(parts[i + 1])
-                                break
-                            except ValueError:
-                                pass
-
-                    if area_index != -1:
-                        target_dir = os.path.join(level_dir, "areas", str(area_index))
-                    else:
-                        target_dir = level_dir
-                    break
-
-        return os.path.join(target_dir, filename)
-
     def pass_serialize(self) -> None:
         """
         Final pass: Regenerate all script text from the structured CommandIRs
@@ -178,6 +104,8 @@ class ExtractionPipeline:
         ctx.curr_level = -1
         ctx.curr_area = -1
         ctx.current_context_prefix = None
+
+        assert self.txt is not None
 
         from geo_layout import get_geo_processor
         from collision import get_collision_processor
@@ -200,7 +128,7 @@ class ExtractionPipeline:
         for geo_rec in self.db.geos.values():
             text = gp.serialize(geo_rec)
             all_symbols.append(("GeoLayout", geo_rec.name))
-            path = self._get_target_path(geo_rec.name)
+            path = self.txt.get_target_path(geo_rec.name)
             filepath_to_content[path].append(text)
 
         # 2. Collect Collisions
@@ -208,7 +136,7 @@ class ExtractionPipeline:
         for col_rec in self.db.collisions.values():
             text = cp.serialize(col_rec)
             all_symbols.append(("Collision", col_rec.name))
-            path = self._get_target_path(col_rec.name)
+            path = self.txt.get_target_path(col_rec.name)
             filepath_to_content[path].append(text)
 
         # 2.1 Collect Rooms
@@ -218,7 +146,7 @@ class ExtractionPipeline:
         for room_rec in self.db.rooms.values():
             text = rp.serialize(room_rec)
             all_symbols.append(("Room", room_rec.name))
-            path = self._get_target_path(room_rec.name)
+            path = self.txt.get_target_path(room_rec.name)
             filepath_to_content[path].append(text)
 
         # 2.2 Collect Vertices
@@ -228,7 +156,7 @@ class ExtractionPipeline:
         for vtx_rec in self.db.vertices.values():
             text = vp.serialize(vtx_rec)
             all_symbols.append(("Vtx", vtx_rec.name))
-            path = self._get_target_path(vtx_rec.name)
+            path = self.txt.get_target_path(vtx_rec.name)
             filepath_to_content[path].append(text)
 
         # 2.3 Collect Lights
@@ -238,7 +166,7 @@ class ExtractionPipeline:
         for light_rec in self.db.lights.values():
             text = lp_light.serialize(light_rec)
             all_symbols.append(("Lights", light_rec.name))
-            path = self._get_target_path(light_rec.name)
+            path = self.txt.get_target_path(light_rec.name)
             filepath_to_content[path].append(text)
 
         # 3. Collect Display Lists
@@ -246,7 +174,7 @@ class ExtractionPipeline:
         for dl_rec in self.db.display_lists.values():
             text = dp.serialize(dl_rec)
             all_symbols.append(("Gfx", dl_rec.name))
-            path = self._get_target_path(dl_rec.name)
+            path = self.txt.get_target_path(dl_rec.name)
             filepath_to_content[path].append(text)
 
         # 4. Collect Behaviors
@@ -262,7 +190,7 @@ class ExtractionPipeline:
         for macro_rec in self.db.macros.values():
             text = mp.serialize(macro_rec)
             all_symbols.append(("MacroObject", macro_rec.name))
-            path = self._get_target_path(macro_rec.name)
+            path = self.txt.get_target_path(macro_rec.name)
             filepath_to_content[path].append(text)
 
         # 6. Collect Level Scripts
@@ -270,7 +198,7 @@ class ExtractionPipeline:
         for script_rec in self.db.level_scripts.values():
             text = lp.serialize(script_rec)
             all_symbols.append(("LevelScript", script_rec.name))
-            path = self._get_target_path(script_rec.name)
+            path = self.txt.get_target_path(script_rec.name)
             filepath_to_content[path].append(text)
 
         # 7. Textures (segment-2 global + level textures)
@@ -283,7 +211,7 @@ class ExtractionPipeline:
                 all_symbols.append(("Texture", tex_rec.name))
                 # The C struct belongs in model.inc.c (or similar)
                 # We use a suffix to force _get_target_path to return the .c file
-                c_path = self._get_target_path(f"{tex_rec.name}_dl")
+                c_path = self.txt.get_target_path(f"{tex_rec.name}_dl")
                 filepath_to_content[c_path].append(text)
 
         # 8. Skyboxes
@@ -293,7 +221,7 @@ class ExtractionPipeline:
             if text:
                 all_symbols.append(("Skybox", sky_rec.level_prefix))
                 # Skybox C code traditionally goes to texture.inc.c
-                path = self._get_target_path(f"{sky_rec.level_prefix}_tiles_c")
+                path = self.txt.get_target_path(f"{sky_rec.level_prefix}_tiles_c")
                 filepath_to_content[path].append(text)
 
         # 9. Audio sequences + music.lua

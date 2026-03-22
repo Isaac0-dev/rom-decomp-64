@@ -23,6 +23,7 @@ from utils import (
     debug_print,
     pack_to_bytes,
     get_vanilla_sm64_rom,
+    set_log_level,
 )
 
 from context import ctx
@@ -91,6 +92,9 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
 
     global _status_enabled, _current_filename, args
     ctx.reached_end = False
+
+    if args:
+        set_log_level(args.verbose)
 
     filename = filename_override or (args.filename if args else "baserom.us.z64")
 
