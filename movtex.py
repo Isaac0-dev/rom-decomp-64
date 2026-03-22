@@ -575,6 +575,7 @@ class MovtexExtractor:
     def emit_water_collection(
         self, seg_candidates: List[int], param: int, context_prefix: Optional[str], txt: Any
     ) -> Optional[str]:
+        return # disabled for now, movtex needs work anyway
         coll = self.assign_from_candidates(seg_candidates, param)
         if not coll:
             debug_print(
