@@ -8,6 +8,79 @@ from typing import Optional
 
 FIELD_NAME_TO_INDEX: dict[str, int] = {}
 
+BEHAVIOR_NAME_OVERRIDES: dict[str, str] = {
+    # Patch some behaviour names that are different in coop (refresh versions)
+    "bhvTHIHugeIslandTop": "bhvThiHugeIslandTop",
+    "bhvTHITinyIslandTop": "bhvThiTinyIslandTop",
+    "bhvWFBreakableWallRight": "bhvWfBreakableWallRight",
+    "bhvWFBreakableWallLeft": "bhvWfBreakableWallLeft",
+    "bhvWFRotatingWoodenPlatform": "bhvWfRotatingWoodenPlatform",
+    "bhvSpawnedBlueCoin": "bhvMrIBlueCoin",
+    "bhvThwomp": "bhvThwomp",
+    "bhvTumblingBridge": "bhvWfTumblingBridge",
+    "bhvBBHTumblingBridge": "bhvBbhTumblingBridge",
+    "bhvLLLTumblingBridge": "bhvLllTumblingBridge",
+    "bhvRRElevatorPlatform": "bhvRrElevatorPlatform",
+    "bhvHMCElevatorPlatform": "bhvHmcElevatorPlatform",
+    "bhvBitFSSinkingPlatforms": "bhvBitfsSinkingPlatforms",
+    "bhvBitFSSinkingCagePlatform": "bhvBitfsSinkingCagePlatform",
+    "bhvDDDMovingPole": "bhvDddMovingPole",
+    "bhvBitFSTiltingInvertedPyramid": "bhvBitfsTiltingInvertedPyramid",
+    "bhvRRRotatingBridgePlatform": "bhvRrRotatingBridgePlatform",
+    "bhvWFSlidingTowerPlatform": "bhvWfSlidingTowerPlatform",
+    "bhvWFElevatorTowerPlatform": "bhvWfElevatorTowerPlatform",
+    "bhvWFSolidTowerPlatform": "bhvWfSolidTowerPlatform",
+    "bhvCCMTouchedStarSpawn": "bhvCcmTouchedStarSpawn",
+    "bhvDDDWarp": "bhvDddWarp",
+    "bhvLLLRotatingHexagonalPlatform": "bhvLllRotatingHexagonalPlatform",
+    "bhvLLLSinkingRockBlock": "bhvLllSinkingRockBlock",
+    "bhvLLLMovingOctagonalMeshPlatform": "bhvLllMovingOctagonalMeshPlatform",
+    "bhvLLLRotatingBlockWithFireBars": "bhvLllRotatingBlockWithFireBars",
+    "bhvLLLRotatingHexFlame": "bhvLllRotatingHexFlame",
+    "bhvLLLWoodPiece": "bhvLllWoodPiece",
+    "bhvLLLFloatingWoodBridge": "bhvLllFloatingWoodBridge",
+    "bhvLLLRotatingHexagonalRing": "bhvLllRotatingHexagonalRing",
+    "bhvLLLSinkingRectangularPlatform": "bhvLllSinkingRectangularPlatform",
+    "bhvLLLSinkingSquarePlatforms": "bhvLllSinkingSquarePlatforms",
+    "bhvLLLTiltingInvertedPyramid": "bhvLllTiltingInvertedPyramid",
+    "bhvLLLHexagonalMesh": "bhvLllHexagonalMesh",
+    "bhvLLLBowserPuzzlePiece": "bhvLllBowserPuzzlePiece",
+    "bhvLLLBowserPuzzle": "bhvLllBowserPuzzle",
+    "bhvWDWExpressElevator": "bhvWdwExpressElevator",
+    "bhvWDWExpressElevatorPlatform": "bhvWdwExpressElevatorPlatform",
+    "bhvJRBSlidingBox": "bhvJrbSlidingBox",
+    "bhvBlueCoinNumber": "bhvBlueCoinNumber",
+    "bhvBooStaircase": "bhvBooBossSpawnedBridge",
+    "bhvBBHTiltingTrapPlatform": "bhvBbhTiltingTrapPlatform",
+    "bhvLLLDrawbridgeSpawner": "bhvLllDrawbridgeSpawner",
+    "bhvLLLDrawbridge": "bhvLllDrawbridge",
+    "bhvWFSlidingPlatform": "bhvWfSlidingPlatform",
+    "bhvTTMBowlingBallSpawner": "bhvTtmBowlingBallSpawner",
+    "bhvBoBBowlingBallSpawner": "bhvBobBowlingBallSpawner",
+    "bhvTHIBowlingBallSpawner": "bhvThiBowlingBallSpawner",
+    "bhvRRCruiserWing": "bhvRrCruiserWing",
+    "bhvSSLMovingPyramidWall": "bhvSslMovingPyramidWall",
+    "bhvStarNumber": "bhvStarNumber",
+    "bhvTTMRollingLog": "bhvTtmRollingLog",
+    "bhvLLLVolcanoFallingTrap": "bhvLllVolcanoFallingTrap",
+    "bhvLLLRollingLog": "bhvLllRollingLog",
+    "bhv1UpWalking": "bhv1upWalking",
+    "bhv1UpRunningAway": "bhv1upRunningAway",
+    "bhv1UpSliding": "bhv1upSliding",
+    "bhv1UpJumpOnApproach": "bhv1upJumpOnApproach",
+    "bhvHidden1Up": "bhvHidden1up",
+    "bhvHidden1UpTrigger": "bhvHidden1upTrigger",
+    "bhvHidden1UpInPole": "bhvHidden1upInPole",
+    "bhvHidden1UpInPoleTrigger": "bhvHidden1upInPoleTrigger",
+    "bhvHidden1UpInPoleSpawner": "bhvHidden1upInPoleSpawner",
+    "bhvWDWSquareFloatingPlatform": "bhvWdwSquareFloatingPlatform",
+    "bhvWDWRectangularFloatingPlatform": "bhvWdwRectangularFloatingPlatform",
+    "bhvJRBFloatingPlatform": "bhvJrbFloatingPlatform",
+    "bhvJRBFloatingBox": "bhvJrbFloatingBox",
+    "bhvTreasureChestsJRB": "bhvTreasureChestsJrb",
+    "bhvTreasureChestsDDD": "bhvTreasureChests",
+}
+
 CMD_INFO = {
     0x00: ("BEGIN", 1),
     0x01: ("DELAY", 1),
@@ -464,6 +537,10 @@ def generate_hashes(src_path: Path):
         (h, structure), commands_list, func_names_list = structural_hash_from_c_source(
             block.strip(), constants
         )
+
+        # Apply name override if present
+        if name in BEHAVIOR_NAME_OVERRIDES:
+            name = BEHAVIOR_NAME_OVERRIDES[name]
 
         if h in hashes:
             print(f"WARNING: Duplicate hash for {name} and {hashes[h]}", file=sys.stderr)
