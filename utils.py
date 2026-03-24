@@ -587,7 +587,7 @@ def debug_error(msg: str) -> None:
 
 
 def segment_from_addr(addr: int) -> int:
-    seg = addr >> 24
+    seg = (addr >> 24) & 0xFF
     offset = addr & 0x00FFFFFF
     if seg == offset:
         debug_print(
@@ -599,9 +599,9 @@ def segment_from_addr(addr: int) -> int:
 def offset_from_segment_addr(addr: int) -> int:
     if addr == -1:
         return -1
-    seg = addr >> 24
+    seg = (addr >> 24) & 0xFF
     offset = addr & 0x00FFFFFF
-    if addr >> 24 == offset:
+    if seg == offset:
         debug_print(
             f"(offset from seg addr) Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}"
         )
