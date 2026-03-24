@@ -503,7 +503,7 @@ def generate_hashes(src_path: Path):
     print("from typing import Dict")
     print("")
     print("KNOWN_BEHAVIOR_HASHES: Dict[str, str] = {")
-    for h, name in sorted(hashes.items(), key=lambda x: x[1]):
+    for h, name in sorted(hashes.items(), key=lambda x: (x[1], x[0])):
         print(f'    "{h}": "{name}",')
     print("}")
 
