@@ -279,17 +279,22 @@ def parse_number(token: str, constants: dict[str, int]) -> Optional[int]:
     return safe_eval_expr(token, constants)
 
 
-def structural_hash_behavior(commands_data, func_names=None):
-    """Hash behavior structure including CALL_NATIVE function names.
+def structural_hash_behavior(
+    commands_data,
+    func_names=None,
+    call_native_mode="resolve",
+    script_start=0,
+    jump_mode="precise",
+):
+    """Hash behavior structure matching py/behavior.py logic.
 
     Args:
         commands_data: List of (opcode, size, words) tuples.
         func_names: Optional parallel list of function name strings for
-                    CALL_NATIVE commands (None entries for non-CALL_NATIVE).
-                    When running from C source, these come from the macro args.
-                    When running from ROM, they come from FunctionMatcher.
+                    CALL_NATIVE commands.
     """
     structural_repr = []
+    current_seg = (script_start >> 24) & 0xFF
 
     for idx, (opcode, size, words) in enumerate(commands_data):
         parts = [f"{opcode:02X}"]
@@ -298,16 +303,31 @@ def structural_hash_behavior(commands_data, func_names=None):
             parts.append(f"{(words[0] >> 16) & 0xFF:02X}")
         elif opcode == 0x01:  # DELAY
             parts.append(f"{words[0] & 0xFFFF:04X}")
-        elif opcode == 0x0C:  # CALL_NATIVE - include function name
+        elif opcode == 0x02 or opcode == 0x04:  # CALL or GOTO
+            target = words[1]
+            target_seg = (target >> 24) & 0xFF
+            if jump_mode == "normalized":
+                if target_seg == current_seg and script_start != 0:
+                    parts.append(f"REL:{target - script_start:08X}")
+                else:
+                    parts.append(f"SEG:{target_seg:02X}")
+            elif jump_mode == "precise":
+                parts.append(f"{target:08X}")
+            # jump_mode == "none" or omitted results in just opcode
+        elif opcode == 0x0C:  # CALL_NATIVE
             fn = None
-            if func_names and idx < len(func_names):
-                fn = func_names[idx]
-            if fn:
-                parts.append(fn)
+            if call_native_mode == "anonymous":
+                parts.append("UNKNOWN")
             else:
-                # Fallback: raw address (or 0 if unavailable)
-                vram = words[1] if size >= 2 else 0
-                parts.append(f"{vram:08X}")
+                if func_names and idx < len(func_names):
+                    fn = func_names[idx]
+                if fn:
+                    parts.append(fn)
+                elif call_native_mode == "fuzzy":
+                    parts.append("UNKNOWN")
+                else:
+                    vram = words[1] if size >= 2 else 0
+                    parts.append(f"{vram:08X}")
         elif opcode in [0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12]:
             field = (words[0] >> 16) & 0xFF
             value = words[0] & 0xFFFF
@@ -340,9 +360,6 @@ def structural_hash_behavior(commands_data, func_names=None):
             bhvParam = words[0] & 0xFFFF
             modelID = words[1]
             parts.append(f"{bhvParam:04X}:{modelID:08X}")
-        elif opcode == 0x2A:  # LOAD_COLLISION_DATA
-            # Address is not cross-ROM stable, just include opcode
-            pass
         elif opcode == 0x2B:  # SET_HITBOX_WITH_OFFSET
             if size >= 3:
                 parts.append(f"{words[1]:08X}:{words[2]:08X}")
@@ -427,10 +444,10 @@ def structural_hash_from_c_source(block_text, constants: dict[str, int]):
         elif cmd_name == "CALL_NATIVE" and args:
             # Extract the function name directly from the C source
             call_native_name = args[0].strip()
-        elif cmd_name == "DELAY" and args:
-            val = parse_number(args[0], constants)
-            if val is not None:
-                words[0] = val & 0xFFFF
+        elif cmd_name in ["CALL", "GOTO"] and args:
+            # We don't have absolute addresses in C source.
+            # Use a placeholder in segment 0x13 where most vanilla behaviors live.
+            words[1] = 0x13000000
         elif (
             cmd_name in ["ADD_FLOAT", "SET_FLOAT", "ADD_INT", "SET_INT", "OR_INT", "BIT_CLEAR"]
             and len(args) >= 2
@@ -442,10 +459,28 @@ def structural_hash_from_c_source(block_text, constants: dict[str, int]):
             if value is None:
                 value = 0
             words[0] = ((field & 0xFF) << 16) | (value & 0xFFFF)
+        elif cmd_name in ["SET_INT_RAND_RSHIFT", "ADD_INT_RAND_RSHIFT"] and len(args) >= 3:
+            field = parse_number(args[0], constants) or 0
+            min_val = parse_number(args[1], constants) or 0
+            rshift = parse_number(args[2], constants) or 0
+            words[0] = ((field & 0xFF) << 16) | (min_val & 0xFFFF)
+            words[1] = (rshift & 0xFFFF) << 16
+        elif (
+            cmd_name in ["SET_RANDOM_FLOAT", "SET_RANDOM_INT", "ADD_RANDOM_FLOAT"]
+            and len(args) >= 3
+        ):
+            field = parse_number(args[0], constants) or 0
+            min_val = parse_number(args[1], constants) or 0
+            range_val = parse_number(args[2], constants) or 0
+            words[0] = ((field & 0xFF) << 16) | (min_val & 0xFFFF)
+            words[1] = (range_val & 0xFFFF) << 16
         elif cmd_name == "SET_MODEL" and args:
             val = parse_number(args[0], constants)
             if val is not None:
                 words[0] = val & 0xFFFF
+        elif cmd_name == "SPAWN_CHILD" and args:
+            modelID = parse_number(args[0], constants) or 0
+            words[1] = modelID
         elif cmd_name == "SET_HITBOX" and len(args) >= 2:
             radius = parse_number(args[0], constants) or 0
             height = parse_number(args[1], constants) or 0
@@ -460,12 +495,30 @@ def structural_hash_from_c_source(block_text, constants: dict[str, int]):
         elif cmd_name == "ANIMATE" and args:
             animIndex = parse_number(args[0], constants) or 0
             words[0] = (animIndex & 0xFF) << 16
+        elif cmd_name == "SPAWN_CHILD_WITH_PARAM" and len(args) >= 2:
+            bhvParam = parse_number(args[0], constants) or 0
+            modelID = parse_number(args[1], constants) or 0
+            words[0] = (words[0] & 0xFFFF0000) | (bhvParam & 0xFFFF)
+            words[1] = modelID
         elif cmd_name == "SET_HITBOX_WITH_OFFSET" and len(args) >= 3:
             radius = parse_number(args[0], constants) or 0
             height = parse_number(args[1], constants) or 0
             downOffset = parse_number(args[2], constants) or 0
             words[1] = ((radius & 0xFFFF) << 16) | (height & 0xFFFF)
             words[2] = downOffset & 0xFFFFFFFF
+        elif cmd_name == "SPAWN_OBJ" and len(args) >= 2:
+            modelID = parse_number(args[1], constants) or 0
+            words[1] = modelID
+        elif cmd_name == "SET_HURTBOX" and len(args) >= 2:
+            radius = parse_number(args[0], constants) or 0
+            height = parse_number(args[1], constants) or 0
+            words[1] = ((radius & 0xFFFF) << 16) | (height & 0xFFFF)
+        elif cmd_name == "SET_INTERACT_TYPE" and args:
+            type_val = parse_number(args[0], constants) or 0
+            words[1] = type_val
+        elif cmd_name == "SET_INTERACT_SUBTYPE" and args:
+            subtype_val = parse_number(args[0], constants) or 0
+            words[1] = subtype_val
         elif cmd_name == "SCALE" and len(args) >= 2:
             field = parse_number(args[0], constants) or 0
             percent = parse_number(args[1], constants) or 0
@@ -475,7 +528,7 @@ def structural_hash_from_c_source(block_text, constants: dict[str, int]):
         func_names.append(call_native_name)
         i = j
 
-    return structural_hash_behavior(commands, func_names=func_names), commands, func_names
+    return commands, func_names
 
 
 def generate_hashes(src_path: Path):
@@ -534,45 +587,64 @@ def generate_hashes(src_path: Path):
             i += 1
         block = txt[start : i - 1]
 
-        (h, structure), commands_list, func_names_list = structural_hash_from_c_source(
-            block.strip(), constants
-        )
+        commands_list, func_names_list = structural_hash_from_c_source(block.strip(), constants)
 
         # Apply name override if present
         if name in BEHAVIOR_NAME_OVERRIDES:
             name = BEHAVIOR_NAME_OVERRIDES[name]
 
-        if h in hashes:
-            print(f"WARNING: Duplicate hash for {name} and {hashes[h]}", file=sys.stderr)
+        # Use 0x13000000 as a reasonable default script start for vanilla
+        script_start = 0x13000000
 
-        hashes[h] = name
-        print(f"{name}: {h} (struct: {structure[:80]}...)", file=sys.stderr)
+        # Generate Precise Hash (might still fail due to placeholder jump targets)
+        h_precise, structure = structural_hash_behavior(
+            commands_list,
+            func_names_list,
+            call_native_mode="resolve",
+            script_start=script_start,
+            jump_mode="precise",
+        )
+        hashes[h_precise] = name
 
-        # Also generate fuzzy hashes for romhack tolerance.
-        # For each CALL_NATIVE position, replace that function name with "UNKNOWN"
-        # to allow matching when a romhack modifies one native function.
+        # Generate Fuzzy Hash (normalized jumps)
+        h_fuzzy, _ = structural_hash_behavior(
+            commands_list,
+            func_names_list,
+            call_native_mode="resolve",
+            script_start=script_start,
+            jump_mode="normalized",
+        )
+        hashes[h_fuzzy] = name
+
+        # Generate Anonymous Hash (anonymous call_native, normalized jumps)
+        h_anon, _ = structural_hash_behavior(
+            commands_list,
+            func_names_list,
+            call_native_mode="anonymous",
+            script_start=script_start,
+            jump_mode="normalized",
+        )
+        hashes[h_anon] = name
+
+        print(f"{name}: {h_precise} (precise), {h_fuzzy} (fuzzy), {h_anon} (anon)")
+
+        # Also generate fuzzy variants for romhack tolerance (one UNKNOWN at a time)
         if func_names_list and any(fn is not None for fn in func_names_list):
-            # Generate one fuzzy variant per CALL_NATIVE position
             for ci in range(len(func_names_list)):
                 if func_names_list[ci] is None:
                     continue
                 fuzzy_names = list(func_names_list)
                 fuzzy_names[ci] = "UNKNOWN"
-                h_fuzzy, _ = structural_hash_behavior(commands_list, func_names=fuzzy_names)
-                if h_fuzzy != h and h_fuzzy not in hashes:
-                    hashes[h_fuzzy] = name
-                elif h_fuzzy in hashes and hashes[h_fuzzy] != name:
-                    print(
-                        f"WARNING: Fuzzy hash collision for {name} and {hashes[h_fuzzy]} "
-                        f"(fn[{ci}]={func_names_list[ci]}->UNKNOWN)",
-                        file=sys.stderr,
-                    )
-
-            # Generate one fully fuzzy variant where ALL CALL_NATIVE positions are "UNKNOWN"
-            fully_fuzzy_names = ["UNKNOWN" if fn is not None else None for fn in func_names_list]
-            h_fully_fuzzy, _ = structural_hash_behavior(commands_list, func_names=fully_fuzzy_names)
-            if h_fully_fuzzy != h and h_fully_fuzzy not in hashes:
-                hashes[h_fully_fuzzy] = name
+                # Use normalized jumps for these variants as they are for hacks
+                h_variant, _ = structural_hash_behavior(
+                    commands_list,
+                    fuzzy_names,
+                    call_native_mode="resolve",
+                    script_start=script_start,
+                    jump_mode="normalized",
+                )
+                if h_variant not in hashes:
+                    hashes[h_variant] = name
 
     print("# This file is auto-generated by tools/generate_behavior_hashes.py")
     print("# Do not edit manually.")

@@ -234,6 +234,14 @@ def _build_structural_repr(
                     parts.append(f"{vram_addr:08X}")
         elif opcode in [0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12]:  # Fields
             parts.append(f"{(words[0] >> 16) & 0xFF:02X}:{words[0] & 0xFFFF:04X}")
+        elif opcode in [0x13, 0x17]:  # SET_INT_RAND_RSHIFT, ADD_INT_RAND_RSHIFT
+            parts.append(
+                f"{(words[0] >> 16) & 0xFF:02X}:{words[0] & 0xFFFF:04X}:{(words[1] >> 16) & 0xFFFF:04X}"
+            )
+        elif opcode in [0x14, 0x15, 0x16]:  # SET_RANDOM_FLOAT/INT, ADD_RANDOM_FLOAT
+            parts.append(
+                f"{(words[0] >> 16) & 0xFF:02X}:{words[0] & 0xFFFF:04X}:{(words[1] >> 16) & 0xFFFF:04X}"
+            )
         elif opcode == 0x1B:  # SET_MODEL
             parts.append(f"{words[0] & 0xFFFF:04X}")
         elif opcode == 0x1C:  # SPAWN_CHILD
@@ -241,10 +249,20 @@ def _build_structural_repr(
         elif opcode == 0x23:  # SET_HITBOX
             if len(words) >= 2:
                 parts.append(f"{words[1]:08X}")
+        elif opcode == 0x27:  # LOAD_ANIMATIONS
+            parts.append(f"{(words[0] >> 16) & 0xFF:02X}")
+        elif opcode == 0x28:  # ANIMATE
+            parts.append(f"{(words[0] >> 16) & 0xFF:02X}")
         elif opcode == 0x29:  # SPAWN_CHILD_WITH_PARAM
             parts.append(f"{words[0] & 0xFFFF:04X}:{words[1]:08X}")
+        elif opcode == 0x2B:  # SET_HITBOX_WITH_OFFSET
+            if len(words) >= 3:
+                parts.append(f"{words[1]:08X}:{words[2]:08X}")
         elif opcode == 0x2C:  # SPAWN_OBJ
             parts.append(f"{words[1]:08X}")
+        elif opcode == 0x2E:  # SET_HURTBOX
+            if len(words) >= 2:
+                parts.append(f"{words[1]:08X}")
         elif opcode == 0x2F:  # SET_INTERACT_TYPE
             parts.append(f"{words[1]:08X}")
         elif opcode == 0x31:  # SET_INTERACT_SUBTYPE
