@@ -32,6 +32,11 @@ def set_log_level(verbosity: int) -> None:
         logger.setLevel(logging.WARNING)
 
 
+def is_debug_mode() -> bool:
+    """Returns True if the script is running in debug mode."""
+    return DEBUG or logger.isEnabledFor(logging.DEBUG)
+
+
 def is_debugger() -> bool:
     return "debugpy" in sys.modules
 
@@ -158,7 +163,7 @@ gLevelScriptTracker: List[str] = []
 
 IS_BIG_ENDIAN: bool = True
 IS_64_BIT: bool = False
-DEBUG: bool = True
+DEBUG: bool = False
 ROMHACK: bool = False
 
 level_num_to_str: Dict[int, str] = {

@@ -14,6 +14,7 @@ from utils import (
     set_rom,
     debug_print,
     debug_fail,
+    is_debug_mode,
 )
 from script_definitions import GLOBAL_SCRIPT_SIGNATURES, GLOBAL_SIGNATURE_HASHES
 from base_processor import BaseProcessor
@@ -224,17 +225,18 @@ class LevelScriptProcessor(BaseProcessor):
             comment = ir.comment if hasattr(ir, "comment") else ""
 
             # Hex dump of the command bytes
-            hex_words = [
-                ir.raw_data[i : i + 4].hex().upper() for i in range(0, len(ir.raw_data), 4)
-            ]
-            bytes_comment = f"/* 0x{ir.address:08X} :: {' '.join(hex_words)} */ "
-            chars = (
-                ((0x18 // 4) * (8 + 1)) + 2 + 4 + (5 + 8)
-            )  # 6 words, 2 spaces and 4 special chars
-            prefix += " " * int((chars - len(bytes_comment)) + 4)
+            if is_debug_mode():
+                hex_words = [
+                    ir.raw_data[i : i + 4].hex().upper() for i in range(0, len(ir.raw_data), 4)
+                ]
+                bytes_comment = f"/* 0x{ir.address:08X} :: {' '.join(hex_words)} */ "
+                chars = (
+                    ((0x18 // 4) * (8 + 1)) + 2 + 4 + (5 + 8)
+                )  # 6 words, 2 spaces and 4 special chars
+                prefix = bytes_comment + (" " * int((chars - len(bytes_comment)) + 4)) + prefix
 
             params_str = ", ".join(map(str, ir.params))
-            output += f"{bytes_comment}{prefix}{comment}{ir.name}({params_str}),\n"
+            output += f"{prefix}{comment}{ir.name}({params_str}),\n"
         output += "};\n"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "script", record.name, output)

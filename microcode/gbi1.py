@@ -227,7 +227,7 @@ class GBI1(Microcode):
         if dis:
             dl_record = dis.parse_dl(address)
 
-            dis.branch_taken = param == G_DL_PUSH  # mark a branch
+            dis.branch_taken = param != G_DL_PUSH  # mark a branch
 
             if dl_record is None:
                 debug_print(f"Failed to parse display list at address {address}")
