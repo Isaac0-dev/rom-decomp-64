@@ -70,18 +70,13 @@ current_texture_info = TextureInfo()
 
 texture_table: Dict[str, TextureMeta] = {}
 
-# Store the reference to the skybox that we loaded
-# So geo layouts can later reference it
-current_skybox: dict[str] = {}
-
 
 def get_current_skybox() -> Optional[str]:
-    return current_skybox.get(ctx.curr_level)
-
-
-def set_current_skybox(skybox: str) -> None:
-    global current_skybox
-    current_skybox[ctx.curr_level] = skybox
+    if ctx.curr_level not in ctx.db.skyboxes:
+        return None
+    skybox = ctx.db.skyboxes[ctx.curr_level]
+    skybox.is_used = True
+    return skybox.skybox_name
 
 
 current_palette: Optional[Union[bytearray, bytes, List[int]]] = None
@@ -489,14 +484,15 @@ def extract_skybox(seg: int, txt: Any, level_name: str) -> None:
     if seg_data is None:
         return
 
-    # Set current_skybox so geo layout can reference it immediately
-    set_current_skybox(f"{level_prefix}_skybox_ptrlist")
+    skybox_name = f"{level_prefix}_skybox_ptrlist"
 
     if ctx.db is not None:
         from rom_database import SkyboxRecord
 
-        ctx.db.skyboxes[level_prefix] = SkyboxRecord(
+        ctx.db.skyboxes[ctx.curr_level] = SkyboxRecord(
             level_prefix=level_prefix,
+            level_num=ctx.curr_level,
+            skybox_name=skybox_name,
             seg_data=bytes(seg_data),
         )
 
@@ -738,6 +734,10 @@ class SkyboxProcessor(BaseProcessor):
 
         if not isinstance(record, _SkyboxRecord):
             return ""
+
+        # Skip unused skyboxes (these are probably from vanilla)
+        if not record.is_used:
+            return
 
         seg_data = record.seg_data
         level_prefix = record.level_prefix

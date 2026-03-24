@@ -407,7 +407,10 @@ class SkyboxRecord:
     SkyboxProcessor.serialize() re-assembles tiles and writes PNG + C.
     """
 
+    level_num: int = 0
     level_prefix: str = ""
+    skybox_name: str = ""
+    is_used: bool = False
     seg_data: bytes = b""
 
 

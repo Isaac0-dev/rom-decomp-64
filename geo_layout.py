@@ -17,7 +17,7 @@ from segment import (
 from byteio import CustomBytesIO
 import hashlib
 from movtex import movtex_extractor
-from texture import get_current_skybox, set_current_skybox
+from texture import get_current_skybox
 import vanilla_matcher
 from base_processor import BaseProcessor
 from rom_database import GeoRecord, CommandIR
@@ -658,8 +658,8 @@ def G_BG(ls, i, s, c):
         func_name = "geo_skybox_main"
 
     bg_name = f"0x{bg_id:04X}"
-    if bg_id == 10 and get_current_skybox():
-        bg_name = str(get_current_skybox())
+    if bg_id == 10:
+        bg_name = get_current_skybox() or bg_name
 
     return CommandIR(0x19, [bg_name, func_name], name="GEO_BACKGROUND"), False, i
 
