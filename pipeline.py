@@ -82,6 +82,12 @@ class ExtractionPipeline:
         # self.pass_refine_models()
         # self.pass_refine_warps()
 
+        # Using water boxes found in collision data, find movtex data
+        from movtex import movtex_extractor
+
+        for (area, level), water_boxes in self.db.water_boxes.items():
+            movtex_extractor.parse_water_boxes(water_boxes, area, level)
+
         # Analysis passes — cross-reference and score records
         self.pass_analysis()
 

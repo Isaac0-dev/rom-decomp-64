@@ -257,6 +257,23 @@ class CollisionRecord:
 
 
 # ---------------------------------------------------------------------------
+# Water box records
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class WaterBoxRecord:
+    """
+    One extracted collision (TERRAIN) layout.
+    """
+
+    seg_num: int = 0
+    seg_start: int = 0
+    seg_end: int = 0
+    commands: List[CommandIR] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Rooms records
 # ---------------------------------------------------------------------------
 
@@ -486,6 +503,7 @@ class RomDatabase:
     trajectories: Dict[Tuple[int, int], TrajectoryRecord] = field(default_factory=dict)
     display_lists: Dict[Tuple[int, int], DisplayListRecord] = field(default_factory=dict)
     collisions: Dict[Tuple[int, int], CollisionRecord] = field(default_factory=dict)
+    water_boxes: Dict[Tuple[int, int], WaterBoxRecord] = field(default_factory=dict)
     rooms: Dict[Tuple[int, int], RoomsRecord] = field(default_factory=dict)
 
     vertices: Dict[Tuple[int, int, int], VertexRecord] = field(default_factory=dict)

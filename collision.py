@@ -8,7 +8,7 @@ from segment import (
 )
 from byteio import CustomBytesIO
 from base_processor import BaseProcessor
-from rom_database import CollisionRecord, CommandIR
+from rom_database import CollisionRecord, WaterBoxRecord, CommandIR
 from context import ctx
 from constants import SURFACES
 from utils import debug_fail
@@ -333,6 +333,14 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
         ir_list.append(
             CommandIR(TERRAIN_LOAD_ENVIRONMENT, [id_val, x1, z1, x2, z2, y], name="COL_WATER_BOX")
         )
+    seg_info = where_is_segment_loaded(0x19)
+    if seg_info is None:
+        print("Segment 0x19 not loaded")
+        return ir_list
+    water_box_rec = WaterBoxRecord(
+        seg_num=0x19, seg_start=seg_info[0], seg_end=seg_info[1], commands=ir_list
+    )
+    ctx.db.water_boxes[(ctx.curr_area, ctx.curr_level)] = water_box_rec
     return ir_list
 
 

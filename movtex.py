@@ -7,6 +7,7 @@ from utils import (
     level_name_to_int_lookup,
     level_name_to_int,
     level_num_to_const_name,
+    level_num_to_str,
 )
 from dataclasses import dataclass
 from typing import Tuple, Any
@@ -20,6 +21,7 @@ from segment import (
 )
 from function_matching.mips_utils import MipsInstruction
 from context import ctx
+from rom_database import WaterBoxRecord
 
 ROTATE_DIRECTION: Dict[int, str] = {
     0: "ROTATE_CLOCKWISE",
@@ -637,6 +639,257 @@ class MovtexExtractor:
         if param not in self._registry:
             self._registry[param] = coll_name
         return coll_name
+
+    def find_segmented_pointers(self, target_addr: int) -> List[Tuple[int, int]]:
+        """Finds all occurrences of a segmented address in all loaded segments."""
+        matches = []
+        target_bytes = struct.pack(">I", target_addr)
+        for seg_num in get_loaded_segment_numbers():
+            data = get_segment(seg_num)
+            if data is None:
+                continue
+            offset = 0
+            while True:
+                offset = data.find(target_bytes, offset)
+                if offset == -1:
+                    break
+                if offset % 4 == 0:
+                    matches.append((seg_num, offset))
+                offset += 4
+        return matches
+
+    def find_vertex_signature(self, signature: bytes) -> List[Tuple[int, int]]:
+        """Finds all occurrences of a vertex coordinate signature in all loaded segments."""
+        matches = []
+        for seg_num in get_loaded_segment_numbers():
+            data = get_segment(seg_num)
+            if data is None:
+                continue
+            offset = 0
+            while True:
+                offset = data.find(signature, offset)
+                if offset == -1:
+                    break
+                # Vertex coordinates in a Movtex quad are typically at offset 8.
+                if offset >= 8:
+                    matches.append((seg_num, offset - 8))
+                offset += 2
+        return matches
+
+    def parse_water_boxes(self, water_boxes: WaterBoxRecord, area: int, level: int) -> None:
+        from segment import load_segment, segmented_to_virtual
+
+        load_segment(water_boxes.seg_num, water_boxes.seg_start, water_boxes.seg_end, False)
+
+        seg_data = get_segment(water_boxes.seg_num)
+        if not seg_data:
+            return
+
+        level_str = level_num_to_str.get(level, "none")
+        context_prefix = f"{level_str}_area_{area}"
+        rel_path, _, _ = self._deduce_paths(context_prefix)
+        level_name_const = level_num_to_const_name.get(level, "LEVEL_NONE")
+
+        rom = get_rom()
+        if not rom:
+            return
+        rom_data = rom.getvalue()
+
+        # Track collection entries to group them later
+        # Keyed by (collection_name, collection_type_param)
+        collections: Dict[Tuple[str, int], List[Tuple[int, str]]] = {}
+
+        def add_to_collection(coll_name: str, coll_type: int, entry_id: int, arr_name: str):
+            key = (coll_name, coll_type)
+            if key not in collections:
+                collections[key] = []
+            # Avoid duplicates in the same collection
+            if not any(e[1] == arr_name for e in collections[key]):
+                collections[key].append((entry_id, arr_name))
+
+        # Identify all COL_WATER_BOX commands
+        water_commands = [c for c in water_boxes.commands if c.name == "COL_WATER_BOX"]
+
+        # For each water box, try to find its moving texture
+        for command in water_commands:
+            cid, x1, z1, x2, z2, y = command.params
+            vtx_coords = [x1, z1, x2, z1, x2, z2, x1, z2]
+            vtx_signature = struct.pack(">8h", *vtx_coords)
+
+            found_ptr = None
+            found_box_id = cid
+            found_standard_values = None
+
+            # Try Rom Manager/SM64 Editor tables first
+            if ctx.db.meta.hack_type in ["SM64 Editor", "Rom Manager"]:
+                for box_type in range(3):
+                    if ctx.db.meta.hack_type == "SM64 Editor":
+                        table_addr = 0x19001800 + 0x50 * box_type
+                    else:  # Rom Manager
+                        table_addr = 0x19006000 + 0x280 * box_type + 0x50 * area
+
+                    try:
+                        table_off = offset_from_segment_addr(table_addr)
+                        table_rom_pos = water_boxes.seg_start + table_off
+                    except Exception:
+                        continue
+
+                    idx = 0
+                    while True:
+                        entry_pos = table_rom_pos + idx * 8
+                        if entry_pos + 8 > len(rom_data):
+                            break
+
+                        box_id = struct.unpack_from(">h", rom_data, entry_pos)[0]
+                        if box_id == -1 or (box_id & 0xFFFF) == 0xFFFF:
+                            break
+
+                        ptr = struct.unpack_from(">I", rom_data, entry_pos + 4)[0]
+                        if ptr == 0 or (ptr >> 24) != 0x19:
+                            idx += 1
+                            continue
+
+                        box_off = offset_from_segment_addr(ptr)
+                        box_rom_pos = water_boxes.seg_start + box_off
+
+                        if box_rom_pos + 24 <= len(rom_data):
+                            actual_data = rom_data[box_rom_pos + 8 : box_rom_pos + 24]
+                            if vtx_signature == actual_data:
+                                # Match found in RM/Editor table!
+                                box_raw = rom_data[box_rom_pos : box_rom_pos + 0x20]
+                                (
+                                    _,
+                                    _,
+                                    scale,
+                                    rx1,
+                                    rz1,
+                                    rx2,
+                                    rz2,
+                                    rx3,
+                                    rz3,
+                                    rx4,
+                                    rz4,
+                                    trait,
+                                    wtype,
+                                ) = struct.unpack(">Ihh8hII", box_raw)
+                                found_standard_values = [
+                                    1,
+                                    0,
+                                    15,
+                                    scale,
+                                    rx1,
+                                    rz1,
+                                    rx2,
+                                    rz2,
+                                    rx3,
+                                    rz3,
+                                    rx4,
+                                    rz4,
+                                    1,
+                                    trait & 0xFF,
+                                    wtype,
+                                ]
+                                found_ptr = ptr
+                                found_box_id = box_id
+                                # We'll group RM/Editor quads by box_type
+                                coll_name = f"{context_prefix}_water_type_{box_type}_collection"
+                                arr_name = f"{context_prefix}_movtex_water_{cid}"
+
+                                if (context_prefix, cid) not in self._emitted_movtex_objects:
+                                    self._emitted_movtex_objects.add((context_prefix, cid))
+                                    c_code = self.values_to_struct(found_standard_values)
+                                    ctx.txt.create_file(
+                                        rel_path,
+                                        f"static Movtex {arr_name}[] = {{\n{c_code}}};\n\n",
+                                        mode="a",
+                                    )
+
+                                add_to_collection(coll_name, box_type, found_box_id, arr_name)
+                                break
+                        idx += 1
+                    if found_ptr:
+                        break
+
+            # General search for other hacks
+            if not found_ptr:
+                sig_matches = self.find_vertex_signature(vtx_signature)
+                for s_seg, s_off in sig_matches:
+                    quad_ptr = (s_seg << 24) | s_off
+
+                    seg_data = get_segment(s_seg)
+                    if not seg_data:
+                        continue
+
+                    # Try to parse as standard Movtex quad (30 bytes for count=1)
+                    quad_data = seg_data[s_off : s_off + 30]
+                    if len(quad_data) < 30:
+                        continue
+
+                    try:
+                        vals = list(struct.unpack_from(">15h", quad_data, 0))
+                        if vals[0] != 1:
+                            continue  # Only support count=1 for now
+
+                        found_standard_values = vals
+                        found_ptr = quad_ptr
+
+                        arr_name = f"{context_prefix}_movtex_water_{cid}"
+                        if (context_prefix, cid) not in self._emitted_movtex_objects:
+                            self._emitted_movtex_objects.add((context_prefix, cid))
+                            c_code = self.values_to_struct(found_standard_values)
+                            ctx.txt.create_file(
+                                rel_path,
+                                f"static Movtex {arr_name}[] = {{\n{c_code}}};\n\n",
+                                mode="a",
+                            )
+
+                        # Now search for a pointer to this quad to find a collection
+                        coll_pointers = self.find_segmented_pointers(quad_ptr)
+                        found_real_coll = False
+                        for cp_seg, cp_off in coll_pointers:
+                            # Collection entries are typically 8 bytes aligned
+                            if cp_off < 4:
+                                continue
+                            coll_id = struct.unpack_from(">h", get_segment(cp_seg), cp_off - 4)[0]
+
+                            # Heuristic: name the collection based on where we found it
+                            phys_addr = segmented_to_virtual((cp_seg << 24) | (cp_off - 4))
+                            real_coll_name = f"{context_prefix}_movtex_coll_{phys_addr:08X}"
+
+                            # Use the ID from the collection if it seems reasonable
+                            add_to_collection(
+                                real_coll_name, 0, coll_id if coll_id != -1 else cid, arr_name
+                            )
+                            found_real_coll = True
+
+                        if not found_real_coll:
+                            # Fallback: construct a manual collection
+                            manual_coll_name = f"{context_prefix}_water_manual_collection"
+                            add_to_collection(manual_coll_name, 0, cid, arr_name)
+
+                        break  # Found a matching quad, move to next water box
+                    except Exception:
+                        continue
+
+        # Write all discovered collections
+        for (coll_name, coll_type), entries in collections.items():
+            if (context_prefix, coll_name) in self._emitted_movtex_objects:
+                continue
+            self._emitted_movtex_objects.add((context_prefix, coll_name))
+
+            coll_content = f"const struct MovtexQuadCollection {coll_name}[] = {{\n"
+            for eid, aname in entries:
+                coll_content += f"    {{ {eid}, {aname} }},\n"
+            coll_content += "    { -1, NULL },\n};\n\n"
+
+            ctx.txt.create_file(rel_path, coll_content, mode="a")
+
+            # Register in Lua
+            ctx.txt.write_lua_append(
+                f"movtexqc_register('{coll_name}', {level_name_const}, {area}, {coll_type})\n",
+                "main.lua",
+            )
+            print(f"SUCCESS: Extracted collection {coll_name} for {context_prefix}")
 
 
 movtex_extractor: MovtexExtractor = MovtexExtractor()
