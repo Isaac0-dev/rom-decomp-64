@@ -658,9 +658,8 @@ def G_BG(ls, i, s, c):
         func_name = "geo_skybox_main"
 
     bg_name = f"0x{bg_id:04X}"
-    if get_current_skybox():
+    if bg_id == 10 and get_current_skybox():
         bg_name = str(get_current_skybox())
-        set_current_skybox(None)
 
     return CommandIR(0x19, [bg_name, func_name], name="GEO_BACKGROUND"), False, i
 

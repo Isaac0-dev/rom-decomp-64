@@ -445,7 +445,7 @@ class ExtractionPipeline:
         self._status("text", "start")
         text_export_async_fn = getattr(text_export, "export_text_async", None)
         if callable(text_export_async_fn):
-            self._text_future = text_export_async_fn(self.rom, self.txt, self.output_dir)
+            self._text_future = text_export_async_fn(self.txt)
             if self._text_future:
 
                 def _done(fut) -> None:
@@ -461,7 +461,7 @@ class ExtractionPipeline:
                     pass
         else:
             try:
-                text_export.export_text(self.rom, self.txt, self.output_dir)
+                text_export.export_text(self.txt)
                 self._status("text", "done")
             except Exception:
                 self._status("text", "error")
@@ -938,6 +938,9 @@ class ExtractionPipeline:
 
         ret = print_parse_summary()
         seg_hooks_assert()
+        from text_export import wait_for_text_export
+
+        wait_for_text_export()
         self.txt.close()
         ctx.reached_end = True
 

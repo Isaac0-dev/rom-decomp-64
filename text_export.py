@@ -132,6 +132,7 @@ def _decode_string(seg2, offset, max_len=800):
 
 
 _text_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+_text_future: Optional[Any] = None
 
 
 def _parse_dialog_entry(seg2, entry_offset):
@@ -181,13 +182,9 @@ def _find_dialog_table(seg2, min_entries=10, max_entries=500):
 
 def _score_course_strings(strings):
     score = 0
-    for s in strings:
-        if any(c in s for c in (" ", "-", "'")):
-            score += 2
-        if len(s) > 8:
-            score += 1
-        if s.lstrip().startswith(tuple(str(i) for i in range(1, 10))):
-            score += 3
+    for i, s in enumerate(strings):
+        if s.startswith(f" {i + 1} "):
+            score += 4
     return score
 
 
@@ -210,17 +207,19 @@ def _find_pointer_table(seg2, count, max_len, start=0, scorer=None, min_len=1):
     end = len(seg2) - count * 4
     best = None
     best_score = -1
-    for offset in range(start, end + 1, 4):
+    for offset in range(start, end + 1):
         strings = []
         ok = True
         for i in range(count):
-            ptr = struct.unpack(">I", seg2[offset + 4 * i : offset + 4 * (i + 1)])[0]
-            if (ptr >> 24) != 0x02:
+            tbl_ptr = offset + i * 4
+            ptr = int.from_bytes(seg2[tbl_ptr:tbl_ptr+4])
+            seg_num = ptr >> 24
+            str_off = ptr & 0x00FFFFFF
+            if seg_num == str_off or seg_num != 0x02:
                 ok = False
                 break
-            str_off = ptr & 0xFFFFFF
             s = _decode_string(seg2, str_off, max_len=max_len)
-            if s is None or len(s) < min_len:
+            if s is None:
                 ok = False
                 break
             strings.append(s)
@@ -339,15 +338,7 @@ def _read_sequential_at(seg2, start, count, max_len, min_len=1):
     return strings
 
 
-def export_text(rom, output_manager=None, output_dir: Optional[str] = None):
-    rom_bytes = getattr(rom, "_data", rom)
-    if not isinstance(rom_bytes, (bytes, bytearray, memoryview)):
-        try:
-            rom_bytes = bytes(rom)
-        except Exception:
-            debug_print("export_text: Unable to read ROM bytes; skipping text export.")
-            return
-
+def export_text(output_manager):
     seg2 = get_segment(2)
     if seg2 is None:
         debug_print("export_text: Segment 2 not loaded; skipping text export.")
@@ -551,11 +542,17 @@ def export_text(rom, output_manager=None, output_dir: Optional[str] = None):
         output_manager.write_lua(lua_course_lines, "courses.lua")
 
 
-def export_text_async(rom, output_manager=None, output_dir: Optional[str] = None):
-    future = _text_executor.submit(export_text, rom, output_manager, output_dir)
+def export_text_async(output_manager):
+    global _text_future
+    _text_future = _text_executor.submit(export_text, output_manager)
     if output_manager and hasattr(output_manager, "register_future"):
         try:
-            output_manager.register_future(future)
+            output_manager.register_future(_text_future)
         except Exception:
             pass
-    return future
+    return _text_future
+
+def wait_for_text_export():
+    if _text_future:
+        return _text_future.result()
+

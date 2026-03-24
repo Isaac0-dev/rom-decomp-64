@@ -72,16 +72,16 @@ texture_table: Dict[str, TextureMeta] = {}
 
 # Store the reference to the skybox that we loaded
 # So geo layouts can later reference it
-current_skybox: Optional[Any] = None
+current_skybox: dict[str] = {}
 
 
-def get_current_skybox() -> Optional[Any]:
-    return current_skybox
+def get_current_skybox() -> Optional[str]:
+    return current_skybox.get(ctx.curr_level)
 
 
-def set_current_skybox(skybox: Any) -> None:
+def set_current_skybox(skybox: str) -> None:
     global current_skybox
-    current_skybox = skybox
+    current_skybox[ctx.curr_level] = skybox
 
 
 current_palette: Optional[Union[bytearray, bytes, List[int]]] = None
@@ -490,8 +490,7 @@ def extract_skybox(seg: int, txt: Any, level_name: str) -> None:
         return
 
     # Set current_skybox so geo layout can reference it immediately
-    global current_skybox
-    current_skybox = f"{level_prefix}_skybox_ptrlist"
+    set_current_skybox(f"{level_prefix}_skybox_ptrlist")
 
     if ctx.db is not None:
         from rom_database import SkyboxRecord
