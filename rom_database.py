@@ -3,6 +3,7 @@ from context import LevelAreaContext
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+from segment import SegmentSnapshot
 
 
 # ---------------------------------------------------------------------------
@@ -25,6 +26,30 @@ class SymbolRecord:
 
 
 @dataclass
+class Parameter:
+    """
+    A structural parameter for a command.
+    Separates the raw value from its presentation (label and format).
+    """
+
+    name: str
+    value: Any
+    fmt: str = "dec"  # "dec", "hex", "ptr", "str"
+    length: int = 4
+
+    def __str__(self) -> str:
+        if self.fmt == "hex":
+            if isinstance(self.value, str):
+                return f"/* {self.name} */ {self.value}"
+            return f"/* {self.name} */ 0x{self.value:0{self.length * 2}x}"
+        if self.fmt == "ptr":
+            if isinstance(self.value, int):
+                return f"/* {self.name} */ 0x{self.value:08X}"
+            return f"/* {self.name} */ {self.value}"
+        return f"/* {self.name} */ {self.value}"
+
+
+@dataclass
 class CommandIR:
     """
     Intermediate representation of a single script command (Level, Geo, Beh, etc).
@@ -38,6 +63,7 @@ class CommandIR:
     indent: int = 0
     comment: str = ""
     name: Optional[str] = None
+    snapshot: Optional[SegmentSnapshot] = None
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +227,8 @@ class BehaviorRecord:
     script_text: str = ""  # Deprecated: use commands for serialization
     # Analysis pass fields
     confidence: float = 0.0
+    map_symbol: Optional[str] = None
+    map_confidence: float = 0.0
     is_vanilla: Optional[bool] = None  # None = not yet analysed
 
     def __str__(self):
@@ -545,7 +573,7 @@ class RomDatabase:
                 address=address, name=name, type=symbol_type, confidence=confidence
             )
 
-    def resolve_symbol(self, address: int, location: LevelAreaContext, type: str) -> str:
+    def resolve_symbol(self, address: int, location: Optional[LevelAreaContext], type: str) -> str:
         """Look up a symbol name by address. Returns default or hex string if not found."""
         if address in self.symbols:
             return self.symbols[address].name

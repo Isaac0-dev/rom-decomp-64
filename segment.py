@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from compression_util.compression import (
     CompressionType,
     detect_compression_type,
@@ -20,6 +21,25 @@ _segment_cache: Dict[Tuple[str, int, int, int, bool], Dict[str, Any]] = {}
 #   - extend:   only extend if the same segment is reloaded with a contiguous/overlapping range
 #   - hack:     current behavior that can alias an append chunk to a different contiguous segment
 SEG_LOAD_MODE: str = "extend"
+
+
+# Take a snapshot of all the current segments and where they're loaded
+@dataclass
+class SegmentSnapshot:
+    segment_locations: Dict[int, Tuple[int, int, Any]] = field(default_factory=dict)
+
+    def __init__(self):
+        self.segment_locations = {}
+        for seg_num, seg in sSegments.items():
+            self.segment_locations[seg_num] = (
+                seg["start"],
+                seg["end"],
+                seg.get("compression_type", CompressionType.NONE),
+            )
+
+    def restore(self):
+        for seg_num, (start, end, compression_type) in self.segment_locations.items():
+            load_segment(seg_num, start, end, compression_type != CompressionType.NONE)
 
 
 def register_segment_load_hook(func: Callable, run_existing: bool = True) -> None:

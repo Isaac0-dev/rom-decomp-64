@@ -78,9 +78,9 @@ class ExtractionPipeline:
         self.pass_global_candidates()  # resolve JUMP_LINK targets
 
         # Refinement passes — operate on the fully-populated db
-        # self.pass_refine_behaviors()
-        # self.pass_refine_models()
-        # self.pass_refine_warps()
+        self.pass_refine_behaviors()
+        self.pass_refine_models()
+        self.pass_refine_warps()
 
         # Using water boxes found in collision data, find movtex data
         from movtex import movtex_extractor

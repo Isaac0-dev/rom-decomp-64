@@ -23,6 +23,104 @@ from model_ids import MODEL_ID_BY_VALUE, _MODEL_ID_BY_LEVEL
 from data.expected_pairings import BEHAVIOR_TO_MODELS, MODEL_TO_BEHAVIORS
 from utils import debug_print
 
+# --- Identification Constants (Migrated from behavior.py) ---
+
+BEHAVIOR_ADDR_OVERRIDES = {
+    0x401700: "RM_Scroll_Texture",
+    0x400000: "RM_Scroll_Texture",
+    0x402300: "editor_Scroll_Texture",
+    0x13003420: "editor_Scroll_Texture2",
+}
+
+CUSTOM_BEHAVIOR_HASHES = {
+    "383604deda1acda4": "bhvBobombBuddyOpensCannon",
+    "31eb59c129ad6852": "bhvHiddenStar",
+    "4051cdddcc5b89e0": "bhvExitPodiumWarp",
+    "c6ee412250536b1e": "bhvToadMessage",
+    "9964b9b7c56cd32e": "bhvBobombBuddy",
+    "bd4934039dac8392": "bhvMessagePanel",
+    "ed126593eae1c2f3": "bhvWFSolidTowerPlatform",
+}
+
+BEHAVIOR_COLLISION_HINTS = {
+    "536e016d5d45dbe8": {
+        0x0700FC0C: "bhvWFBreakableWallRight",
+    },
+}
+
+# Patch some behaviour names that are different in coop (refresh versions)
+BEHAVIOR_NAME_OVERRIDES = {
+    "bhvTHIHugeIslandTop": "bhvThiHugeIslandTop",
+    "bhvTHITinyIslandTop": "bhvThiTinyIslandTop",
+    "bhvWFBreakableWallRight": "bhvWfBreakableWallRight",
+    "bhvWFBreakableWallLeft": "bhvWfBreakableWallLeft",
+    "bhvWFRotatingWoodenPlatform": "bhvWfRotatingWoodenPlatform",
+    "bhvSpawnedBlueCoin": "bhvMrIBlueCoin",
+    "bhvThwomp": "bhvThwomp",
+    "bhvTumblingBridge": "bhvWfTumblingBridge",
+    "bhvBBHTumblingBridge": "bhvBbhTumblingBridge",
+    "bhvLLLTumblingBridge": "bhvLllTumblingBridge",
+    "bhvRRElevatorPlatform": "bhvRrElevatorPlatform",
+    "bhvHMCElevatorPlatform": "bhvHmcElevatorPlatform",
+    "bhvBitFSSinkingPlatforms": "bhvBitfsSinkingPlatforms",
+    "bhvBitFSSinkingCagePlatform": "bhvBitfsSinkingCagePlatform",
+    "bhvDDDMovingPole": "bhvDddMovingPole",
+    "bhvBitFSTiltingInvertedPyramid": "bhvBitfsTiltingInvertedPyramid",
+    "bhvRRRotatingBridgePlatform": "bhvRrRotatingBridgePlatform",
+    "bhvWFSlidingTowerPlatform": "bhvWfSlidingTowerPlatform",
+    "bhvWFElevatorTowerPlatform": "bhvWfElevatorTowerPlatform",
+    "bhvWFSolidTowerPlatform": "bhvWfSolidTowerPlatform",
+    "bhvCCMTouchedStarSpawn": "bhvCcmTouchedStarSpawn",
+    "bhvDDDWarp": "bhvDddWarp",
+    "bhvLLLRotatingHexagonalPlatform": "bhvLllRotatingHexagonalPlatform",
+    "bhvLLLSinkingRockBlock": "bhvLllSinkingRockBlock",
+    "bhvLLLMovingOctagonalMeshPlatform": "bhvLllMovingOctagonalMeshPlatform",
+    "bhvLLLRotatingBlockWithFireBars": "bhvLllRotatingBlockWithFireBars",
+    "bhvLLLRotatingHexFlame": "bhvLllRotatingHexFlame",
+    "bhvLLLWoodPiece": "bhvLllWoodPiece",
+    "bhvLLLFloatingWoodBridge": "bhvLllFloatingWoodBridge",
+    "bhvLLLRotatingHexagonalRing": "bhvLllRotatingHexagonalRing",
+    "bhvLLLSinkingRectangularPlatform": "bhvLllSinkingRectangularPlatform",
+    "bhvLLLSinkingSquarePlatforms": "bhvLllSinkingSquarePlatforms",
+    "bhvLLLTiltingInvertedPyramid": "bhvLllTiltingInvertedPyramid",
+    "bhvLLLHexagonalMesh": "bhvLllHexagonalMesh",
+    "bhvLLLBowserPuzzlePiece": "bhvLllBowserPuzzlePiece",
+    "bhvLLLBowserPuzzle": "bhvLllBowserPuzzle",
+    "bhvWDWExpressElevator": "bhvWdwExpressElevator",
+    "bhvWDWExpressElevatorPlatform": "bhvWdwExpressElevatorPlatform",
+    "bhvJRBSlidingBox": "bhvJrbSlidingBox",
+    "bhvBlueCoinNumber": "bhvBlueCoinNumber",
+    "bhvBooStaircase": "bhvBooBossSpawnedBridge",
+    "bhvBBHTiltingTrapPlatform": "bhvBbhTiltingTrapPlatform",
+    "bhvLLLDrawbridgeSpawner": "bhvLllDrawbridgeSpawner",
+    "bhvLLLDrawbridge": "bhvLllDrawbridge",
+    "bhvWFSlidingPlatform": "bhvWfSlidingPlatform",
+    "bhvTTMBowlingBallSpawner": "bhvTtmBowlingBallSpawner",
+    "bhvBoBBowlingBallSpawner": "bhvBobBowlingBallSpawner",
+    "bhvTHIBowlingBallSpawner": "bhvThiBowlingBallSpawner",
+    "bhvRRCruiserWing": "bhvRrCruiserWing",
+    "bhvSSLMovingPyramidWall": "bhvSslMovingPyramidWall",
+    "bhvStarNumber": "bhvStarNumber",
+    "bhvTTMRollingLog": "bhvTtmRollingLog",
+    "bhvLLLVolcanoFallingTrap": "bhvLllVolcanoFallingTrap",
+    "bhvLLLRollingLog": "bhvLllRollingLog",
+    "bhv1UpWalking": "bhv1upWalking",
+    "bhv1UpRunningAway": "bhv1upRunningAway",
+    "bhv1UpSliding": "bhv1upSliding",
+    "bhv1UpJumpOnApproach": "bhv1upJumpOnApproach",
+    "bhvHidden1Up": "bhvHidden1up",
+    "bhvHidden1UpTrigger": "bhvHidden1upTrigger",
+    "bhvHidden1UpInPole": "bhvHidden1upInPole",
+    "bhvHidden1UpInPoleTrigger": "bhvHidden1upInPoleTrigger",
+    "bhvHidden1UpInPoleSpawner": "bhvHidden1upInPoleSpawner",
+    "bhvWDWSquareFloatingPlatform": "bhvWdwSquareFloatingPlatform",
+    "bhvWDWRectangularFloatingPlatform": "bhvWdwRectangularFloatingPlatform",
+    "bhvJRBFloatingPlatform": "bhvJrbFloatingPlatform",
+    "bhvJRBFloatingBox": "bhvJrbFloatingBox",
+    "bhvTreasureChestsJRB": "bhvTreasureChestsJrb",
+    "bhvTreasureChestsDDD": "bhvTreasureChests",
+}
+
 
 # ---------------------------------------------------------------------------
 # Base class
@@ -91,8 +189,10 @@ def _get_vanilla_hashes_for_behavior(beh_name: str) -> Set[str]:
     """Return all known vanilla hashes for a given behavior name."""
     global _BEH_NAME_TO_HASHES
     if not _BEH_NAME_TO_HASHES:
-        for h, name in KNOWN_BEHAVIOR_HASHES.items():
-            _BEH_NAME_TO_HASHES.setdefault(name, set()).add(h)
+        for h, name_or_list in KNOWN_BEHAVIOR_HASHES.items():
+            names = [name_or_list] if isinstance(name_or_list, str) else name_or_list
+            for name in names:
+                _BEH_NAME_TO_HASHES.setdefault(name, set()).add(h)
     return _BEH_NAME_TO_HASHES.get(beh_name, set())
 
 
@@ -136,30 +236,64 @@ class ObjectCorrelationPass(DatabaseAnalysisPass):
 
         debug_print("[ObjectCorrelationPass] Done.")
 
-    # ----- Phase 1: Behaviour confidence from hash matching -----
+    # ----- Phase 1: Behaviour confidence from hash and map matching -----
 
     def _score_behaviors(self, db: RomDatabase) -> None:
-        """Set base confidence on every BehaviorRecord."""
+        """Set base confidence and initial naming on every BehaviorRecord."""
         for key, beh in db.behaviors.items():
-            if beh.beh_name.startswith("bhv_unknown") or beh.beh_name.startswith("bhv_fail"):
+            segmented_addr = beh.seg_addr
+
+            # Evidence collection for all candidates
+            candidates: Dict[str, float] = {}
+
+            def add_candidate(name, weight):
+                if name:
+                    candidates[name] = candidates.get(name, 0.0) + weight
+
+            # 1. Address Overrides (Highest priority)
+            if segmented_addr in BEHAVIOR_ADDR_OVERRIDES:
+                add_candidate(BEHAVIOR_ADDR_OVERRIDES[segmented_addr], 1.2)
+
+            # 2. Hash Matching (Bytecode logic)
+            # Check all tiers against both vanilla and custom databases
+            for h_val, weight in [(beh.hash, 1.0), (beh.fuzzy_hash, 0.7), (beh.anon_hash, 0.4)]:
+                if not h_val:
+                    continue
+                # Vanilla
+                if h_val in KNOWN_BEHAVIOR_HASHES:
+                    res = KNOWN_BEHAVIOR_HASHES[h_val]
+                    h_names = [res] if isinstance(res, str) else res
+                    for n in h_names:
+                        add_candidate(n, weight)
+                # Custom overrides
+                if h_val in CUSTOM_BEHAVIOR_HASHES:
+                    res = CUSTOM_BEHAVIOR_HASHES[h_val]
+                    h_names = [res] if isinstance(res, str) else res
+                    for n in h_names:
+                        add_candidate(n, weight)
+
+            # 3. Map File Symbol
+            if beh.map_symbol:
+                add_candidate(beh.map_symbol, 0.8)
+
+            if not candidates:
                 beh.confidence = 0.0
                 continue
 
-            score = self.BASE_KNOWN_SCORE
+            # Pick the best candidate based on accumulated weight
+            best_name = max(candidates, key=lambda k: candidates[k])
+            best_weight = candidates[best_name]
 
-            # Bonus: check hash tiers against known vanilla hashes for that name
-            vanilla_hashes = _get_vanilla_hashes_for_behavior(beh.beh_name)
-            if vanilla_hashes:
-                if beh.hash in vanilla_hashes:
-                    score += self.FUZZY_HASH_EXACT_MATCH_SCORE
-                elif beh.fuzzy_hash in vanilla_hashes:
-                    score += self.FUZZY_HASH_EXACT_MATCH_SCORE
-                elif beh.anon_hash in vanilla_hashes:
-                    # Anonymous tier: weaker signal (structure matches but
-                    # we can't verify the C function pointers)
-                    score += self.FUZZY_HASH_EXACT_MATCH_SCORE * 0.7
+            # Apply final name overrides (Refresh/Coop naming conventions)
+            if best_name in BEHAVIOR_NAME_OVERRIDES:
+                best_name = BEHAVIOR_NAME_OVERRIDES[best_name]
 
-            beh.confidence = min(score, 1.0)
+            # Store results
+            beh.beh_name = best_name
+            beh.confidence = min(best_weight, 1.0)
+
+            # Sync global symbol table
+            db.set_symbol(segmented_addr, best_name, "Behavior", confidence=beh.confidence)
 
     # ----- Phase 2: Bidirectional object correlation -----
 
@@ -427,12 +561,92 @@ class TextureContextPass(DatabaseAnalysisPass):
 
 
 # ---------------------------------------------------------------------------
+# Pass 3: Scrolling Texture Conversion
+# ---------------------------------------------------------------------------
+
+
+class ScrollingTexturePass(DatabaseAnalysisPass):
+    name = "scrolling_textures"
+
+    def run(self, db: RomDatabase) -> None:
+        from context import ctx
+        from scroll_targets import register_scroll_target
+
+        for level_key, level in db.level_scripts.items():
+            for ir in level.commands:
+                if ir.name not in ("OBJECT", "OBJECT_WITH_ACTS"):
+                    continue
+
+                # ir.params: [model, posX, posY, posZ, angX, angY, angZ, behParam, beh_rec]
+                if len(ir.params) < 9:
+                    continue
+
+                bhv_rec = ir.params[8]
+                if not bhv_rec or not hasattr(bhv_rec, "seg_addr"):
+                    continue
+
+                beh_addr = bhv_rec.seg_addr
+
+                # Resolve the refined name from the global symbol table
+                beh_name = db.resolve_symbol(beh_addr, None, "Behavior")
+
+                if beh_name == "editor_Scroll_Texture2":
+                    beh_name = "editor_Scroll_Texture"
+
+                # Check if it's a known scrolling behavior
+                if not ("editor_Scroll_Texture" in beh_name or "RM_Scroll_Texture" in beh_name):
+                    continue
+
+                # ir.params[1-7] are now Parameter objects.
+                posX = ir.params[1].value
+                posY = ir.params[2].value
+                posZ = ir.params[3].value
+                angX = ir.params[4].value
+                angY = ir.params[5].value
+                angZ = ir.params[6].value
+                behParam = ir.params[7].value
+
+                # Restore the segment state to ensure we find the data we need
+                if ir.snapshot is not None:
+                    ir.snapshot.restore()
+
+                converted = register_scroll_target(
+                    db.txt if hasattr(db, "txt") else ctx.txt,
+                    level.name,
+                    beh_name,
+                    posX,
+                    posY,
+                    posZ,
+                    angX,
+                    angY,
+                    angZ,
+                    behParam,
+                )
+
+                if not converted:
+                    continue
+
+                ir.params[1].value = converted["posX"]
+                ir.params[2].value = converted["posY"]
+                ir.params[3].value = converted["posZ"]
+                ir.params[4].value = converted["angleX"]
+                ir.params[5].value = converted["angleY"]
+                ir.params[6].value = converted["angleZ"]
+                ir.params[7].value = converted["behParam"]
+                ir.params[7].fmt = "hex"  # Ensure target ID is hex
+
+                # Update the behavior name string in the C output
+                ir.params[8] = beh_name
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
 ALL_ANALYSIS_PASSES: List[DatabaseAnalysisPass] = [
     ObjectCorrelationPass(),
     TextureContextPass(),
+    ScrollingTexturePass(),
 ]
 
 

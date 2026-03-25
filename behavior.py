@@ -1,6 +1,6 @@
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple
-from behavior_hashes import KNOWN_BEHAVIOR_HASHES
+from address_map import get_address_map
 from utils import (
     debug_print,
     segment_from_addr,
@@ -31,18 +31,15 @@ _CODE_VRAM_START = validator.rom_test(
 _CODE_ROM_START = 0x1000
 
 
-def _get_func_matcher():
-    global _func_matcher
-    if _func_matcher is None:
-        from function_matching.matcher import FunctionMatcher
-
-        _func_matcher = FunctionMatcher()
-    return _func_matcher
-
-
 def resolve_call_native(vram_addr: int) -> Optional[str]:
     if vram_addr in _call_native_cache:
         return _call_native_cache[vram_addr]
+
+    # Priority 1: Map File (Most telling for non-relocated code)
+    map_sym = get_address_map().get_symbol(vram_addr)
+    if map_sym:
+        _call_native_cache[vram_addr] = map_sym
+        return map_sym
 
     rom_offset = -1
     vram_base = _CODE_VRAM_START
@@ -72,7 +69,9 @@ def resolve_call_native(vram_addr: int) -> Optional[str]:
         return None
 
     try:
-        matcher = _get_func_matcher()
+        from function_matching.matcher import FunctionMatcher
+
+        matcher = FunctionMatcher()
         result = matcher.match(rom, rom_offset=rom_offset, vram_start=vram_base, rom_start=rom_base)
         if result is not None and result.confidence >= 0.90:
             if result.is_ambiguous:
@@ -89,29 +88,6 @@ def resolve_call_native(vram_addr: int) -> Optional[str]:
     _call_native_cache[vram_addr] = None
     return None
 
-
-BEHAVIOR_ADDR_OVERRIDES = {
-    0x401700: "RM_Scroll_Texture",
-    0x400000: "RM_Scroll_Texture",
-    0x402300: "editor_Scroll_Texture",
-    0x13003420: "editor_Scroll_Texture2",
-}
-
-CUSTOM_BEHAVIOR_HASHES = {
-    "383604deda1acda4": "bhvBobombBuddyOpensCannon",
-    "31eb59c129ad6852": "bhvHiddenStar",
-    "4051cdddcc5b89e0": "bhvExitPodiumWarp",
-    "c6ee412250536b1e": "bhvToadMessage",
-    "9964b9b7c56cd32e": "bhvBobombBuddy",
-    "bd4934039dac8392": "bhvMessagePanel",
-    "ed126593eae1c2f3": "bhvWFSolidTowerPlatform",
-}
-
-BEHAVIOR_COLLISION_HINTS = {
-    "536e016d5d45dbe8": {
-        0x0700FC0C: "bhvWFBreakableWallRight",
-    },
-}
 
 OBJECT_FIELDS = {
     1: "oFlags",
@@ -841,27 +817,15 @@ class BehaviorProcessor(BaseProcessor):
         fuzzy_hash = structural_hash_behavior_fuzzy(commands_data, script_start=segmented_addr)
         anon_hash = structural_hash_behavior_anonymous(commands_data, script_start=segmented_addr)
 
+        # Placeholder name for initial discovery.
+        # Final identification happens in a refinement pass (py/db_passes.py).
         name = f"bhv_unknown_{segmented_addr:08X}"
-        known_name = None
-        if segmented_addr in BEHAVIOR_ADDR_OVERRIDES:
-            known_name = BEHAVIOR_ADDR_OVERRIDES[segmented_addr]
-        elif prec_hash in CUSTOM_BEHAVIOR_HASHES:
-            known_name = CUSTOM_BEHAVIOR_HASHES[prec_hash]
-        elif prec_hash in KNOWN_BEHAVIOR_HASHES:
-            known_name = KNOWN_BEHAVIOR_HASHES[prec_hash]
-        elif fuzzy_hash in CUSTOM_BEHAVIOR_HASHES:
-            known_name = CUSTOM_BEHAVIOR_HASHES[fuzzy_hash]
-        elif fuzzy_hash in KNOWN_BEHAVIOR_HASHES:
-            known_name = KNOWN_BEHAVIOR_HASHES[fuzzy_hash]
-        elif anon_hash in CUSTOM_BEHAVIOR_HASHES:
-            known_name = CUSTOM_BEHAVIOR_HASHES[anon_hash]
-        elif anon_hash in KNOWN_BEHAVIOR_HASHES:
-            known_name = KNOWN_BEHAVIOR_HASHES[anon_hash]
 
-        if known_name and not (
-            known_name.startswith("bhv_unknown") or "_bhv_unknown_" in known_name
-        ):
-            name = known_name
+        # Map Evidence (Hint Only)
+        map_sym = get_address_map().get_symbol(segmented_addr)
+        map_conf = 0.0
+        if map_sym:
+            map_conf = 0.5  # Baseline for map hint
 
         if self.ctx.db is None:
             debug_fail(f"Failed to find database for behavior at 0x{segmented_addr:08x}")
@@ -874,6 +838,8 @@ class BehaviorProcessor(BaseProcessor):
             fuzzy_hash=fuzzy_hash,
             anon_hash=anon_hash,
             commands=commands_ir,
+            map_symbol=map_sym,
+            map_confidence=map_conf,
         )
         self.ctx.db.behaviors[db_key] = record
         self.ctx.db.set_symbol(segmented_addr, name, "Behavior")

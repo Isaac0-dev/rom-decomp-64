@@ -139,6 +139,8 @@ BEHAVIOR_TO_MODELS: Dict[str, FrozenSet[str]] = {
             "MODEL_CASTLE_WOODEN_DOOR",
             "MODEL_CASTLE_CASTLE_DOOR",
             "MODEL_CASTLE_METAL_DOOR",
+            "MODEL_CASTLE_GROUNDS_CASTLE_DOOR",
+            "MODEL_CASTLE_GROUNDS_METAL_DOOR",
             "MODEL_BBH_HAUNTED_DOOR",
             "MODEL_HMC_WOODEN_DOOR",
             "MODEL_HMC_METAL_DOOR",
@@ -154,6 +156,12 @@ BEHAVIOR_TO_MODELS: Dict[str, FrozenSet[str]] = {
             "MODEL_CASTLE_METAL_DOOR",
             "MODEL_CASTLE_GROUNDS_CASTLE_DOOR",
             "MODEL_CASTLE_GROUNDS_METAL_DOOR",
+            "MODEL_BBH_HAUNTED_DOOR",
+            "MODEL_HMC_WOODEN_DOOR",
+            "MODEL_HMC_METAL_DOOR",
+            "MODEL_HMC_HAZY_MAZE_DOOR",
+            "MODEL_COURTYARD_WOODEN_DOOR",
+            "MODEL_CCM_CABIN_DOOR",
         }
     ),
     "bhvStarDoor": frozenset(

@@ -212,7 +212,7 @@ def _find_pointer_table(seg2, count, max_len, start=0, scorer=None, min_len=1):
         ok = True
         for i in range(count):
             tbl_ptr = offset + i * 4
-            ptr = int.from_bytes(seg2[tbl_ptr : tbl_ptr + 4])
+            ptr = int.from_bytes(seg2[tbl_ptr : tbl_ptr + 4], byteorder="big")
             seg_num = ptr >> 24
             str_off = ptr & 0x00FFFFFF
             if seg_num == str_off or seg_num != 0x02:

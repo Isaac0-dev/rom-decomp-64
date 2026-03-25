@@ -737,7 +737,7 @@ class SkyboxProcessor(BaseProcessor):
 
         # Skip unused skyboxes (these are probably from vanilla)
         if not record.is_used:
-            return
+            return ""
 
         seg_data = record.seg_data
         level_prefix = record.level_prefix

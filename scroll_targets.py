@@ -147,7 +147,9 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
     return vtx_buffers, collected_verts
 
 
-def register_scroll_target(txt, beh_name, posX, posY, posZ, angleX, angleY, angleZ, behParam):
+def register_scroll_target(
+    txt, level_name, beh_name, posX, posY, posZ, angleX, angleY, angleZ, behParam
+):
     global _scroll_counter
 
     # Update the hack type if it's not set
@@ -181,7 +183,7 @@ def register_scroll_target(txt, beh_name, posX, posY, posZ, angleX, angleY, angl
 
     if num_verts <= 0:
         debug_print(
-            f"Invalid vtx count for scroll target in level {ctx.get_cur_level()} "
+            f"Invalid vtx count for scroll target in level {level_name} "
             f"variant {variant} "
             f"pos({posX_s}, {posY_s}, {posZ_s}) "
             f"angle({angX_s}, {angY_s}, {angZ_s}) "
@@ -191,14 +193,14 @@ def register_scroll_target(txt, beh_name, posX, posY, posZ, angleX, angleY, angl
         )
         return None
 
-    vtx_buffers, collected_verts = _find_scroll_vtxs(addr, ctx.get_cur_level(), num_verts)
+    vtx_buffers, collected_verts = _find_scroll_vtxs(addr, level_name, num_verts)
     if vtx_buffers is None or len(vtx_buffers) == 0:
-        name = vertices.parse_vertices(addr, num_verts, txt, f"{ctx.get_cur_level()}_scroll")
+        name = vertices.parse_vertices(addr, num_verts, txt, f"{level_name}_scroll")
         if name != "NULL":
-            vtx_buffers, collected_verts = _find_scroll_vtxs(addr, ctx.get_cur_level(), num_verts)
+            vtx_buffers, collected_verts = _find_scroll_vtxs(addr, level_name, num_verts)
         if vtx_buffers is None or len(vtx_buffers) == 0:
             debug_print(
-                f"Could not find vertex buffer for scroll target {beh_name} at address 0x{addr:08X} for level {ctx.get_cur_level()} "
+                f"Could not find vertex buffer for scroll target {beh_name} at address 0x{addr:08X} for level {level_name} "
                 f"variant {variant} "
                 f"pos({posX_s}, {posY_s}, {posZ_s}) "
                 f"angle({angX_s}, {angY_s}, {angZ_s}) "
@@ -209,12 +211,12 @@ def register_scroll_target(txt, beh_name, posX, posY, posZ, angleX, angleY, angl
             return None
         else:
             debug_print(
-                f"INFO: Manually parsed {num_verts} scroll vertices at 0x{addr:08X} for {ctx.get_cur_level()}"
+                f"INFO: Manually parsed {num_verts} scroll vertices at 0x{addr:08X} for {level_name}"
             )
 
     if collected_verts != num_verts:
         debug_print(
-            f"WARNING: Vertex count mismatch for scroll target {beh_name} at 0x{addr:08X} in {ctx.get_cur_level()}: "
+            f"WARNING: Vertex count mismatch for scroll target {beh_name} at 0x{addr:08X} in {level_name}: "
             f"expected {num_verts}, found {collected_verts}. Proceeding with found vertices."
         )
 

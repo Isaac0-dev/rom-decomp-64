@@ -10,13 +10,11 @@ from segment import (
     get_segment,
     segment_from_addr,
 )
-from rom_database import CommandIR
+from rom_database import CommandIR, Parameter
 
 
 def format_param_hex(name, value, length):
-    if isinstance(value, str):
-        return f"/* {name} */ {value}"
-    return f"/* {name} */ 0x{value:0{length * 2}x}"
+    return Parameter(name, value, "hex", length)
 
 
 def format_param_string(name, value, length):
@@ -37,11 +35,23 @@ def format_param_string(name, value, length):
     offset = 4 - length
     signed_value = struct.unpack("!" + format_str, packed_value[offset:])[0]
 
-    return f"/* {name} */ {signed_value}"
+    return Parameter(name, signed_value, "dec", length)
 
 
-def format_output(cmd, params, no_print=False):
-    return CommandIR(opcode=0, params=params, name=cmd, indent=ctx.indent, raw_data=ctx.cmd_bytes)
+def format_output(cmd, params, no_print=False, take_snapshot=False):
+    from segment import SegmentSnapshot
+
+    snapshot = None
+    if take_snapshot:
+        snapshot = SegmentSnapshot()
+    return CommandIR(
+        opcode=0,
+        params=params,
+        name=cmd,
+        indent=ctx.indent,
+        raw_data=ctx.cmd_bytes,
+        snapshot=snapshot,
+    )
 
 
 ###############
@@ -669,43 +679,13 @@ def OBJECT_WITH_ACTS(values):
     behParam = CMD_W(values)
     beh = CMD_PTR(values)
 
-    from behavior import KNOWN_BEHAVIOR_HASHES, get_behavior_processor
+    from behavior import get_behavior_processor
 
     bhv_rec = get_behavior_processor().parse(
         beh, txt=ctx.txt, context_prefix=ctx.current_context_prefix
     )
     beh_name = str(bhv_rec)
     beh_name_hash = getattr(bhv_rec, "hash", "") if not isinstance(bhv_rec, str) else ""
-
-    if beh_name == "editor_Scroll_Texture2":
-        beh_name = "editor_Scroll_Texture"
-
-    if ("editor_Scroll_Texture" in beh_name or "RM_Scroll_Texture" in beh_name) and acts != 0:
-        from scroll_targets import register_scroll_target
-
-        converted_scroll = register_scroll_target(
-            ctx.txt, beh_name, posX, posY, posZ, angleX, angleY, angleZ, behParam
-        )
-        if converted_scroll:
-            posX = converted_scroll["posX"]
-            posY = converted_scroll["posY"]
-            posZ = converted_scroll["posZ"]
-            angleX = converted_scroll["angleX"]
-            angleY = converted_scroll["angleY"]
-            angleZ = converted_scroll["angleZ"]
-            behParam = converted_scroll["behParam"]
-            if converted_scroll["invalid"]:
-                if beh_name_hash in KNOWN_BEHAVIOR_HASHES:
-                    known_name = KNOWN_BEHAVIOR_HASHES[beh_name_hash]
-                    beh_name = (
-                        known_name
-                        if not (
-                            known_name.startswith("bhv_unknown") or "_bhv_unknown_" in known_name
-                        )
-                        else f"/* Hash: {beh_name_hash} */ {beh_name}"
-                    )
-                else:
-                    beh_name = f"/* Hash: {beh_name_hash} */ {beh_name}"
 
     from model_ids import resolve_model_id
 
@@ -730,7 +710,9 @@ def OBJECT_WITH_ACTS(values):
         record_type=RecordType.OBJECT if is_object else RecordType.OBJECT_WITH_ACTS,
         data={
             "model": model,
+            "beh_addr": beh,
             "beh_name": beh_name,
+            "beh_hash": beh_name_hash,
             "pos": (posX, posY, posZ),
             "angle": (angleX, angleY, angleZ),
             "behParam": behParam,
@@ -740,10 +722,10 @@ def OBJECT_WITH_ACTS(values):
     )
 
     if is_object:
-        return format_output("OBJECT", params)
+        return format_output("OBJECT", params, take_snapshot=True)
     else:
         params.append(format_param_hex("acts", acts, 1))
-        return format_output("OBJECT_WITH_ACTS", params)
+        return format_output("OBJECT_WITH_ACTS", params, take_snapshot=True)
 
 
 def MARIO(values):
