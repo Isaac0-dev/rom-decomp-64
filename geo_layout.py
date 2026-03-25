@@ -1,7 +1,8 @@
 from utils import (
     get_rom,
-    CMD_HH_unpack,
+    CMD_HH_unpack_s,
     CMD_HHHHHH_unpack,
+    CMD_HHHHHH_unpack_s,
     to_signed16,
     debug_print,
     is_debug_mode,
@@ -218,6 +219,10 @@ def geo_size_rotation_node(w0: int) -> int:
     return 3 if ((w0 >> 16) & 0xFF) & 0x80 else 2
 
 
+def geo_size_billboard(w0: int) -> int:
+    return 3 if ((w0 >> 8) & 0xFF) & 0x80 else 2
+
+
 # --- Structural Hashing ---
 def _build_geo_structural_repr(
     commands_data: List[Tuple[int, int, List[int]]],
@@ -255,7 +260,7 @@ def _build_geo_structural_repr(
         elif opcode == 0x15:  # GEO_DISPLAY_LIST
             parts.append(f"{words[1]:08X}")
         elif opcode == 0x20:  # GEO_CULLING_RADIUS
-            parts.append(f"{words[0] & 0xFFFF:04X}")
+            parts.append(f"{to_signed16(words[0] & 0xFFFF):04X}")
         elif opcode == 0x08:  # GEO_NODE_SCREEN_AREA
             if len(words) >= 3:
                 parts.append(f"{words[1]:08X}:{words[2]:08X}")
@@ -450,29 +455,31 @@ def G_CLOSE(ls, i, s, c):
 
 
 def G_ASSIGN_AS_VIEW(ls, i, s, c):
-    index = ls[0] & 0xFFFF
+    index = to_signed16(ls[0] & 0xFFFF)
     return CommandIR(0x06, [index], name="GEO_ASSIGN_AS_VIEW"), False, i
 
 
 def G_UPDATE_NODE_FLAGS(ls, i, s, c):
-    operation = ls[0] & 0xFF
-    bits = ls[0] >> 16
+    operation = (ls[0] >> 16) & 0xFF
+    bits = to_signed16(ls[0] & 0xFFFF)
     return CommandIR(0x07, [operation, bits], name="GEO_UPDATE_NODE_FLAGS"), False, i
 
 
 def G_SCREEN(ls, i, s, c):
-    x, y = CMD_HH_unpack(ls[1])
-    w, h = CMD_HH_unpack(ls[2])
-    return CommandIR(0x08, [ls[0] & 0xFFFF, x, y, w, h], name="GEO_NODE_SCREEN_AREA"), False, i
+    num_entries = to_signed16(ls[0] & 0xFFFF)
+    x, y = CMD_HH_unpack_s(ls[1])
+    w, h = CMD_HH_unpack_s(ls[2])
+    return CommandIR(0x08, [num_entries, x, y, w, h], name="GEO_NODE_SCREEN_AREA"), False, i
 
 
 def G_ORTHO(ls, i, s, c):
-    return CommandIR(0x09, [ls[0] & 0xFFFF], name="GEO_NODE_ORTHO"), False, i
+    scale = to_signed16(ls[0] & 0xFFFF)
+    return CommandIR(0x09, [scale], name="GEO_NODE_ORTHO"), False, i
 
 
 def G_FRUST(ls, i, s, c):
-    fov = ls[0] & 0xFFFF
-    near, far = CMD_HH_unpack(ls[1])
+    fov = to_signed16(ls[0] & 0xFFFF)
+    near, far = CMD_HH_unpack_s(ls[1])
     if len(ls) > 2:
         func = resolve_geo_asm(ls[2], geo_camera_frustum_callbacks) or "NULL"
         return (
@@ -492,22 +499,22 @@ def G_ZBUF(ls, i, s, c):
 
 
 def G_RANGE(ls, i, s, c):
-    min_d, max_d = CMD_HH_unpack(ls[1])
+    min_d, max_d = CMD_HH_unpack_s(ls[1])
     return (
-        CommandIR(0x0D, [to_signed16(min_d), to_signed16(max_d)], name="GEO_RENDER_RANGE"),
+        CommandIR(0x0D, [min_d, max_d], name="GEO_RENDER_RANGE"),
         False,
         i,
     )
 
 
 def G_SWITCH(ls, i, s, c):
-    count = ls[0] & 0xFFFF
+    count = to_signed16(ls[0] & 0xFFFF)
     func = resolve_geo_asm(ls[1], geo_switch_case_callbacks) or "NULL"
     return CommandIR(0x0E, [count, func], name="GEO_SWITCH_CASE"), False, i
 
 
 def G_CAM(ls, i, s, c):
-    t = ls[0] & 0xFFFF
+    t = to_signed16(ls[0] & 0xFFFF)
     x1, y1, z1, x2, y2, z2 = map(to_signed16, CMD_HHHHHH_unpack(ls[1:4]))
     func = resolve_geo_asm(ls[4], geo_camera_callbacks) or "NULL"
     return CommandIR(0x0F, [t, x1, y1, z1, x2, y2, z2, func], name="GEO_CAMERA"), False, i
@@ -518,27 +525,27 @@ def G_TRANS_ROT(ls, i, s, c):
     layer = param & 0xF
     p = param & 0x70
     if p == 0x30:  # ROT_Y
-        ry = ls[1] & 0xFFFF
+        ry = to_signed16(ls[1] & 0xFFFF)
         if param & 0x80:
             dl = get_dl_name(ls[2], s, c)
             return CommandIR(0x10, [layer, ry, dl], name="GEO_ROTATE_Y_WITH_DL"), False, i
         return CommandIR(0x10, [layer, ry], name="GEO_ROTATE_Y"), False, i
     if p == 0x20:  # ROT
-        rx = ls[1] & 0xFFFF
-        ry, rz = CMD_HH_unpack(ls[2])
+        rx = to_signed16(ls[1] & 0xFFFF)
+        ry, rz = CMD_HH_unpack_s(ls[2])
         if param & 0x80:
             dl = get_dl_name(ls[3], s, c)
             return CommandIR(0x10, [layer, rx, ry, rz, dl], name="GEO_ROTATE_WITH_DL"), False, i
         return CommandIR(0x10, [layer, rx, ry, rz], name="GEO_ROTATE"), False, i
     if p == 0x10:  # TRANS
-        tx, ty = CMD_HH_unpack(ls[1])
-        tz = to_signed16((ls[2] >> 16) & 0xFFFF)
+        tx, ty = CMD_HH_unpack_s(ls[1])
+        tz, _ = CMD_HH_unpack_s(ls[2])
         if param & 0x80:
             dl = get_dl_name(ls[3], s, c)
             return CommandIR(0x10, [layer, tx, ty, tz, dl], name="GEO_TRANSLATE_WITH_DL"), False, i
         return CommandIR(0x10, [layer, tx, ty, tz], name="GEO_TRANSLATE"), False, i
     # TRANS_ROT
-    tx, ty, tz, rx, ry, rz = CMD_HHHHHH_unpack(ls[1:4])
+    tx, ty, tz, rx, ry, rz = CMD_HHHHHH_unpack_s(ls[1:4])
     if param & 0x80:
         dl = get_dl_name(ls[4], s, c)
         return (
@@ -556,10 +563,10 @@ def G_TRANS_ROT(ls, i, s, c):
 
 
 def G_TRANS_NODE(ls, i, s, c):
-    param = (ls[0] >> 16) & 0xFF
+    param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
-    x, y = CMD_HH_unpack(ls[1])
-    z = to_signed16((ls[2] >> 16) & 0xFFFF) if len(ls) > 2 else 0
+    x = to_signed16(ls[0] & 0xFFFF)
+    y, z = CMD_HH_unpack_s(ls[1])
     if param & 0x80 and len(ls) > 2:
         dl = get_dl_name(ls[2], s, c)
         return (
@@ -571,10 +578,10 @@ def G_TRANS_NODE(ls, i, s, c):
 
 
 def G_ROT_NODE(ls, i, s, c):
-    param = (ls[0] >> 16) & 0xFF
+    param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
-    x, y = CMD_HH_unpack(ls[1])
-    z = to_signed16((ls[2] >> 16) & 0xFFFF) if len(ls) > 2 else 0
+    x = to_signed16(ls[0] & 0xFFFF)
+    y, z = CMD_HH_unpack_s(ls[1])
     if param & 0x80 and len(ls) > 2:
         dl = get_dl_name(ls[2], s, c)
         return (
@@ -588,22 +595,26 @@ def G_ROT_NODE(ls, i, s, c):
 def G_ANIM(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
     tx = to_signed16(ls[0] & 0xFFFF)
-    ty, tz = CMD_HH_unpack(ls[1])
+    ty, tz = CMD_HH_unpack_s(ls[1])
     dl = get_dl_name(ls[2], s, c)
     return CommandIR(0x13, [layer, tx, ty, tz, dl], name="GEO_ANIMATED_PART"), False, i
 
 
 def G_BILL_PARAMS(ls, i, s, c):
-    layer = ((ls[0] >> 16) & 0xFF) & 0xF
+    param = (ls[0] >> 8) & 0xFF
+    layer = param & 0xF
     tx = to_signed16(ls[0] & 0xFFFF)
-    ty, tz = CMD_HH_unpack(ls[1])
-    dl = get_dl_name(ls[2], s, c) if len(ls) > 2 else "NULL"
-    if dl != "NULL":
-        return (
-            CommandIR(0x14, [layer, tx, ty, tz, dl], name="GEO_BILLBOARD_WITH_PARAMS_AND_DL"),
-            False,
-            i,
-        )
+    ty, tz = CMD_HH_unpack_s(ls[1])
+    if param == 0 and tx == 0 and ls[1] == 0:
+        return CommandIR(0x14, [], name="GEO_BILLBOARD"), False, i
+    if param & 0x80:
+        dl = get_dl_name(ls[2], s, c) if len(ls) > 2 else "NULL"
+        if dl != "NULL":
+            return (
+                CommandIR(0x14, [layer, tx, ty, tz, dl], name="GEO_BILLBOARD_WITH_PARAMS_AND_DL"),
+                False,
+                i,
+            )
     return CommandIR(0x14, [layer, tx, ty, tz], name="GEO_BILLBOARD_WITH_PARAMS"), False, i
 
 
@@ -614,8 +625,8 @@ def G_DL(ls, i, s, c):
 
 
 def G_SHAD(ls, i, s, c):
-    t = ls[0] & 0xFFFF
-    solidity, scale = CMD_HH_unpack(ls[1])
+    t = to_signed16(ls[0] & 0xFFFF)
+    solidity, scale = CMD_HH_unpack_s(ls[1])
     return CommandIR(0x16, [t, solidity, scale], name="GEO_SHADOW"), False, i
 
 
@@ -624,7 +635,7 @@ def G_OBJ(ls, i, s, c):
 
 
 def G_ASM(ls, i, s, c):
-    param = ls[0] & 0xFFFF
+    param = to_signed16(ls[0] & 0xFFFF)
     func_addr = ls[1]
     func_name = resolve_geo_asm(func_addr, context=geo_asm_callbacks) or "NULL"
 
@@ -648,7 +659,7 @@ def G_ASM(ls, i, s, c):
 
 
 def G_BG(ls, i, s, c):
-    bg_id = ls[0] & 0xFFFF
+    bg_id = to_signed16(ls[0] & 0xFFFF)
     func_addr = ls[1]
     if func_addr == 0:
         return CommandIR(0x19, [f"0x{bg_id:04X}"], name="GEO_BACKGROUND_COLOR"), False, i
@@ -671,17 +682,18 @@ def G_NOP_1A(ls, i, s, c):
 
 
 def G_COPY_VIEW(ls, i, s, c):
-    return CommandIR(0x1B, [], name="GEO_COPY_VIEW"), False, i
+    index = to_signed16(ls[0] & 0xFFFF)
+    return CommandIR(0x1B, [index], name="GEO_COPY_VIEW"), False, i
 
 
 def G_HELD_OBJECT(ls, i, s, c):
-    layer = (ls[0] >> 16) & 0xFF
-    tx, ty = CMD_HH_unpack(ls[1])
-    tz = to_signed16((ls[2] >> 16) & 0xFFFF)
+    param = (ls[0] >> 16) & 0xFF
+    tx = to_signed16(ls[0] & 0xFFFF)
+    ty, tz = CMD_HH_unpack_s(ls[1])
     func_addr = ls[2]
     func_name = resolve_geo_asm(func_addr, context=geo_held_object_callbacks) or "NULL"
     return (
-        CommandIR(0x1C, [layer, tx, ty, tz, func_name], name="GEO_HELD_OBJECT"),
+        CommandIR(0x1C, [param, tx, ty, tz, func_name], name="GEO_HELD_OBJECT"),
         False,
         i,
     )
@@ -698,7 +710,8 @@ def G_SCALE(ls, i, s, c):
 
 
 def G_CULL(ls, i, s, c):
-    return CommandIR(0x20, [ls[0] & 0xFFFF], name="GEO_CULLING_RADIUS"), False, i
+    culling_radius = to_signed16(ls[0] & 0xFFFF)
+    return CommandIR(0x20, [culling_radius], name="GEO_CULLING_RADIUS"), False, i
 
 
 def G_NOP_1E(ls, i, s, c):
@@ -743,7 +756,7 @@ geo_command_table: Dict[int, Dict[str, Any]] = {
     0x11: {"name": "GEO_TRANSLATE_NODE", "func": G_TRANS_NODE, "size": geo_size_translate_node},
     0x12: {"name": "GEO_ROTATION_NODE", "func": G_ROT_NODE, "size": geo_size_rotation_node},
     0x13: {"name": "GEO_ANIMATED_PART", "func": G_ANIM, "size": geo_size_3},
-    0x14: {"name": "GEO_BILLBOARD_WITH_PARAMS", "func": G_BILL_PARAMS, "size": geo_size_dl},
+    0x14: {"name": "GEO_BILLBOARD", "func": G_BILL_PARAMS, "size": geo_size_billboard},
     0x15: {"name": "GEO_DISPLAY_LIST", "func": G_DL, "size": geo_size_2},
     0x16: {"name": "GEO_SHADOW", "func": G_SHAD, "size": geo_size_2},
     0x17: {"name": "GEO_RENDER_OBJ", "func": G_OBJ, "size": geo_size_1},

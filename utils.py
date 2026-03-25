@@ -455,9 +455,7 @@ def CMD_HH_pack(a: int, b: int) -> int:
 
 
 def CMD_HHHHHH_unpack(values: List[int]) -> Tuple[int, int, int, int, int, int]:
-    v1 = values.pop(0)
-    v2 = values.pop(0)
-    v3 = values.pop(0)
+    v1, v2, v3 = values[0], values[1], values[2]
     a1, b1 = CMD_HH_unpack(v1)
     a2, b2 = CMD_HH_unpack(v2)
     a3, b3 = CMD_HH_unpack(v3)
@@ -470,6 +468,41 @@ def CMD_HHHHHH_pack(a: int, b: int, c: int, d: int, e: int, f: int) -> Tuple[int
         CMD_HH_pack(c, d),
         CMD_HH_pack(e, f),
     )
+
+
+def to_signed(val: int, bits: int) -> int:
+    mask = (1 << bits) - 1
+    val = val & mask
+    margin = 1 << (bits - 1)
+    return (val + margin) % (1 << bits) - margin
+
+
+def auto_generate_signed_functions():
+    current_module = sys.modules[__name__]
+    unpackers = [n for n in dir(current_module) if n.startswith("CMD_") and n.endswith("_unpack")]
+    width_map = {"B": 8, "H": 16}
+
+    for name in unpackers:
+        original_func = getattr(current_module, name)
+
+        # Extract bit pattern (e.g. "BBH")
+        bit_pattern = name.split("_")[1]
+        widths = [width_map[c] for c in bit_pattern if c in width_map]
+
+        # Define the wrapper logic
+        def make_signed_wrapper(func, w_list):
+            def signed_unpacker(*args, **kwargs):
+                results = func(*args, **kwargs)
+                return tuple(to_signed(res, w) for res, w in zip(results, w_list))
+
+            return signed_unpacker
+
+        # Inject the new function with the "_s" suffix
+        signed_version = make_signed_wrapper(original_func, widths)
+        setattr(current_module, f"{name}_s", signed_version)
+
+
+auto_generate_signed_functions()
 
 
 def CMD_W_unpack(value: int) -> int:
