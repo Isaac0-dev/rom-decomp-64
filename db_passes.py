@@ -23,29 +23,11 @@ from model_ids import MODEL_ID_BY_VALUE, _MODEL_ID_BY_LEVEL
 from data.expected_pairings import BEHAVIOR_TO_MODELS, MODEL_TO_BEHAVIORS
 from utils import debug_print
 
-# --- Identification Constants (Migrated from behavior.py) ---
-
 BEHAVIOR_ADDR_OVERRIDES = {
     0x401700: "RM_Scroll_Texture",
     0x400000: "RM_Scroll_Texture",
     0x402300: "editor_Scroll_Texture",
     0x13003420: "editor_Scroll_Texture2",
-}
-
-CUSTOM_BEHAVIOR_HASHES = {
-    "383604deda1acda4": "bhvBobombBuddyOpensCannon",
-    "31eb59c129ad6852": "bhvHiddenStar",
-    "4051cdddcc5b89e0": "bhvExitPodiumWarp",
-    "c6ee412250536b1e": "bhvToadMessage",
-    "9964b9b7c56cd32e": "bhvBobombBuddy",
-    "bd4934039dac8392": "bhvMessagePanel",
-    "ed126593eae1c2f3": "bhvWFSolidTowerPlatform",
-}
-
-BEHAVIOR_COLLISION_HINTS = {
-    "536e016d5d45dbe8": {
-        0x0700FC0C: "bhvWFBreakableWallRight",
-    },
 }
 
 # Patch some behaviour names that are different in coop (refresh versions)
@@ -262,12 +244,6 @@ class ObjectCorrelationPass(DatabaseAnalysisPass):
                 # Vanilla
                 if h_val in KNOWN_BEHAVIOR_HASHES:
                     res = KNOWN_BEHAVIOR_HASHES[h_val]
-                    h_names = [res] if isinstance(res, str) else res
-                    for n in h_names:
-                        add_candidate(n, weight)
-                # Custom overrides
-                if h_val in CUSTOM_BEHAVIOR_HASHES:
-                    res = CUSTOM_BEHAVIOR_HASHES[h_val]
                     h_names = [res] if isinstance(res, str) else res
                     for n in h_names:
                         add_candidate(n, weight)
@@ -574,7 +550,7 @@ class ScrollingTexturePass(DatabaseAnalysisPass):
 
         for level_key, level in db.level_scripts.items():
             for ir in level.commands:
-                if ir.name not in ("OBJECT", "OBJECT_WITH_ACTS"):
+                if ir.name != "OBJECT":
                     continue
 
                 # ir.params: [model, posX, posY, posZ, angX, angY, angZ, behParam, beh_rec]
@@ -582,13 +558,9 @@ class ScrollingTexturePass(DatabaseAnalysisPass):
                     continue
 
                 bhv_rec = ir.params[8]
-                if not bhv_rec or not hasattr(bhv_rec, "seg_addr"):
+                if not bhv_rec or not hasattr(bhv_rec, "beh_name"):
                     continue
-
-                beh_addr = bhv_rec.seg_addr
-
-                # Resolve the refined name from the global symbol table
-                beh_name = db.resolve_symbol(beh_addr, None, "Behavior")
+                beh_name = bhv_rec.beh_name
 
                 if beh_name == "editor_Scroll_Texture2":
                     beh_name = "editor_Scroll_Texture"
