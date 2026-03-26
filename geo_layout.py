@@ -100,6 +100,18 @@ LAYER_NAMES: Dict[int, str] = {
     7: "LAYER_TRANSPARENT_INTER",
 }
 
+SHADOW_TYPE_NAMES: Dict[int, str] = {
+    0: "SHADOW_CIRCLE_9_VERTS",
+    1: "SHADOW_CIRCLE_4_VERTS",
+    2: "SHADOW_CIRCLE_4_VERTS_FLAT_UNUSED",
+    3: "SHADOW_SPIKE_EXT",
+    10: "SHADOW_SQUARE_PERMANENT",
+    11: "SHADOW_SQUARE_SCALABLE",
+    12: "SHADOW_SQUARE_TOGGLABLE",
+    50: "SHADOW_RECTANGLE_HARDCODED_OFFSET",
+    99: "SHADOW_CIRCLE_PLAYER",
+}
+
 geo_asm_callbacks: List[str] = [
     "geo_update_projectile_pos_from_parent",
     "geo_update_layer_transparency",
@@ -523,40 +535,41 @@ def G_CAM(ls, i, s, c):
 def G_TRANS_ROT(ls, i, s, c):
     param = (ls[0] >> 16) & 0xFF
     layer = param & 0xF
+    layer_name = LAYER_NAMES.get(layer, layer)
     p = param & 0x70
     if p == 0x30:  # ROT_Y
         ry = to_signed16(ls[1] & 0xFFFF)
         if param & 0x80:
             dl = get_dl_name(ls[2], s, c)
-            return CommandIR(0x10, [layer, ry, dl], name="GEO_ROTATE_Y_WITH_DL"), False, i
-        return CommandIR(0x10, [layer, ry], name="GEO_ROTATE_Y"), False, i
+            return CommandIR(0x10, [layer_name, ry, dl], name="GEO_ROTATE_Y_WITH_DL"), False, i
+        return CommandIR(0x10, [layer_name, ry], name="GEO_ROTATE_Y"), False, i
     if p == 0x20:  # ROT
         rx = to_signed16(ls[1] & 0xFFFF)
         ry, rz = CMD_HH_unpack_s(ls[2])
         if param & 0x80:
             dl = get_dl_name(ls[3], s, c)
-            return CommandIR(0x10, [layer, rx, ry, rz, dl], name="GEO_ROTATE_WITH_DL"), False, i
-        return CommandIR(0x10, [layer, rx, ry, rz], name="GEO_ROTATE"), False, i
+            return CommandIR(0x10, [layer_name, rx, ry, rz, dl], name="GEO_ROTATE_WITH_DL"), False, i
+        return CommandIR(0x10, [layer_name, rx, ry, rz], name="GEO_ROTATE"), False, i
     if p == 0x10:  # TRANS
         tx, ty = CMD_HH_unpack_s(ls[1])
         tz, _ = CMD_HH_unpack_s(ls[2])
         if param & 0x80:
             dl = get_dl_name(ls[3], s, c)
-            return CommandIR(0x10, [layer, tx, ty, tz, dl], name="GEO_TRANSLATE_WITH_DL"), False, i
-        return CommandIR(0x10, [layer, tx, ty, tz], name="GEO_TRANSLATE"), False, i
+            return CommandIR(0x10, [layer_name, tx, ty, tz, dl], name="GEO_TRANSLATE_WITH_DL"), False, i
+        return CommandIR(0x10, [layer_name, tx, ty, tz], name="GEO_TRANSLATE"), False, i
     # TRANS_ROT
     tx, ty, tz, rx, ry, rz = CMD_HHHHHH_unpack_s(ls[1:4])
     if param & 0x80:
         dl = get_dl_name(ls[4], s, c)
         return (
             CommandIR(
-                0x10, [layer, tx, ty, tz, rx, ry, rz, dl], name="GEO_TRANSLATE_ROTATE_WITH_DL"
+                0x10, [layer_name, tx, ty, tz, rx, ry, rz, dl], name="GEO_TRANSLATE_ROTATE_WITH_DL"
             ),
             False,
             i,
         )
     return (
-        CommandIR(0x10, [layer, tx, ty, tz, rx, ry, rz], name="GEO_TRANSLATE_ROTATE"),
+        CommandIR(0x10, [layer_name, tx, ty, tz, rx, ry, rz], name="GEO_TRANSLATE_ROTATE"),
         False,
         i,
     )
@@ -565,44 +578,48 @@ def G_TRANS_ROT(ls, i, s, c):
 def G_TRANS_NODE(ls, i, s, c):
     param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
+    layer_name = LAYER_NAMES.get(layer, layer)
     x = to_signed16(ls[0] & 0xFFFF)
     y, z = CMD_HH_unpack_s(ls[1])
     if param & 0x80 and len(ls) > 2:
         dl = get_dl_name(ls[2], s, c)
         return (
-            CommandIR(0x11, [layer, x, y, z, dl], name="GEO_TRANSLATE_NODE_WITH_DL"),
+            CommandIR(0x11, [layer_name, x, y, z, dl], name="GEO_TRANSLATE_NODE_WITH_DL"),
             False,
             i,
         )
-    return CommandIR(0x11, [layer, x, y, z], name="GEO_TRANSLATE_NODE"), False, i
+    return CommandIR(0x11, [layer_name, x, y, z], name="GEO_TRANSLATE_NODE"), False, i
 
 
 def G_ROT_NODE(ls, i, s, c):
     param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
+    layer_name = LAYER_NAMES.get(layer, layer)
     x = to_signed16(ls[0] & 0xFFFF)
     y, z = CMD_HH_unpack_s(ls[1])
     if param & 0x80 and len(ls) > 2:
         dl = get_dl_name(ls[2], s, c)
         return (
-            CommandIR(0x12, [layer, x, y, z, dl], name="GEO_ROTATION_NODE_WITH_DL"),
+            CommandIR(0x12, [layer_name, x, y, z, dl], name="GEO_ROTATION_NODE_WITH_DL"),
             False,
             i,
         )
-    return CommandIR(0x12, [layer, x, y, z], name="GEO_ROTATION_NODE"), False, i
+    return CommandIR(0x12, [layer_name, x, y, z], name="GEO_ROTATION_NODE"), False, i
 
 
 def G_ANIM(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
+    layer_name = LAYER_NAMES.get(layer, layer)
     tx = to_signed16(ls[0] & 0xFFFF)
     ty, tz = CMD_HH_unpack_s(ls[1])
     dl = get_dl_name(ls[2], s, c)
-    return CommandIR(0x13, [layer, tx, ty, tz, dl], name="GEO_ANIMATED_PART"), False, i
+    return CommandIR(0x13, [layer_name, tx, ty, tz, dl], name="GEO_ANIMATED_PART"), False, i
 
 
 def G_BILL_PARAMS(ls, i, s, c):
     param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
+    layer_name = LAYER_NAMES.get(layer, layer)
     tx = to_signed16(ls[0] & 0xFFFF)
     ty, tz = CMD_HH_unpack_s(ls[1])
     if param == 0 and tx == 0 and ls[1] == 0:
@@ -611,23 +628,25 @@ def G_BILL_PARAMS(ls, i, s, c):
         dl = get_dl_name(ls[2], s, c) if len(ls) > 2 else "NULL"
         if dl != "NULL":
             return (
-                CommandIR(0x14, [layer, tx, ty, tz, dl], name="GEO_BILLBOARD_WITH_PARAMS_AND_DL"),
+                CommandIR(0x14, [layer_name, tx, ty, tz, dl], name="GEO_BILLBOARD_WITH_PARAMS_AND_DL"),
                 False,
                 i,
             )
-    return CommandIR(0x14, [layer, tx, ty, tz], name="GEO_BILLBOARD_WITH_PARAMS"), False, i
+    return CommandIR(0x14, [layer_name, tx, ty, tz], name="GEO_BILLBOARD_WITH_PARAMS"), False, i
 
 
 def G_DL(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
+    layer_name = LAYER_NAMES.get(layer, layer)
     dl = get_dl_name(ls[1], s, c)
-    return CommandIR(0x15, [layer, dl], name="GEO_DISPLAY_LIST"), False, i
+    return CommandIR(0x15, [layer_name, dl], name="GEO_DISPLAY_LIST"), False, i
 
 
 def G_SHAD(ls, i, s, c):
-    t = to_signed16(ls[0] & 0xFFFF)
+    shadow_type = to_signed16(ls[0] & 0xFFFF)
+    shadow_type_name = SHADOW_TYPE_NAMES.get(shadow_type, shadow_type)
     solidity, scale = CMD_HH_unpack_s(ls[1])
-    return CommandIR(0x16, [t, solidity, scale], name="GEO_SHADOW"), False, i
+    return CommandIR(0x16, [shadow_type_name, solidity, scale], name="GEO_SHADOW"), False, i
 
 
 def G_OBJ(ls, i, s, c):
@@ -702,11 +721,12 @@ def G_HELD_OBJECT(ls, i, s, c):
 def G_SCALE(ls, i, s, c):
     param = (ls[0] >> 16) & 0xFF
     layer = param & 0xF
+    layer_name = LAYER_NAMES.get(layer, layer)
     scale = ls[1]
     if param & 0x80:
         dl = get_dl_name(ls[2], s, c)
-        return CommandIR(0x1D, [layer, f"0x{scale:08X}", dl], name="GEO_SCALE_WITH_DL"), False, i
-    return CommandIR(0x1D, [layer, f"0x{scale:08X}"], name="GEO_SCALE"), False, i
+        return CommandIR(0x1D, [layer_name, f"0x{scale:08X}", dl], name="GEO_SCALE_WITH_DL"), False, i
+    return CommandIR(0x1D, [layer_name, f"0x{scale:08X}"], name="GEO_SCALE"), False, i
 
 
 def G_CULL(ls, i, s, c):
@@ -724,6 +744,7 @@ def G_NOP_1F(ls, i, s, c):
 
 def G_BONE(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
+    layer_name = LAYER_NAMES.get(layer, layer)
     tx = to_signed16((ls[1] >> 16) & 0xFFFF)
     ty = to_signed16(ls[1] & 0xFFFF)
     tz = to_signed16((ls[2] >> 16) & 0xFFFF)
@@ -731,7 +752,7 @@ def G_BONE(ls, i, s, c):
     ry = to_signed16((ls[3] >> 16) & 0xFFFF)
     rz = to_signed16(ls[3] & 0xFFFF)
     dl = get_dl_name(ls[4], s, c)
-    return CommandIR(0x21, [layer, tx, ty, tz, rx, ry, rz, dl], name="GEO_BONE"), False, i
+    return CommandIR(0x21, [layer_name, tx, ty, tz, rx, ry, rz, dl], name="GEO_BONE"), False, i
 
 
 # --- Command Table ---

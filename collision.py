@@ -335,7 +335,7 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
         )
     seg_info = where_is_segment_loaded(0x19)
     if seg_info is None:
-        print("Segment 0x19 not loaded")
+        print("Cannot extract water boxes because segment 0x19 is not loaded")
         return ir_list
     water_box_rec = WaterBoxRecord(
         seg_num=0x19, seg_start=seg_info[0], seg_end=seg_info[1], commands=ir_list

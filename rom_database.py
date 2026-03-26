@@ -172,6 +172,9 @@ class LevelRecord:
     def __str__(self):
         return self.name or self.level_name
 
+    def __contains__(self, item):
+        return item in (self.name or self.level_name)
+
 
 # ---------------------------------------------------------------------------
 # Texture records

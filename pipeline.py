@@ -302,7 +302,7 @@ class ExtractionPipeline:
         io_q: queue.Queue = queue.Queue()
 
         def stream_reader(pipe, q):
-            for line in iter(pipe.readline, b""):
+            for line in iter(pipe.readline, ""):
                 q.put(line)
             pipe.close()
 

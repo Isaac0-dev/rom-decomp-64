@@ -83,7 +83,7 @@ class OutputManager:
             return self._file_cache[filepath]
 
         # Close the oldest opened file if the cache gets too large.
-        if len(self._file_cache) >= 256:
+        if len(self._file_cache) >= 1024:
             oldest_path = next(iter(self._file_cache))
             self._file_cache.pop(oldest_path).close()
 
@@ -241,7 +241,7 @@ class OutputManager:
                 del self._file_cache[target_path]
 
             if target_path not in self._file_cache:
-                if len(self._file_cache) >= 256:
+                if len(self._file_cache) >= 1024:
                     oldest_path = next(iter(self._file_cache))
                     self._file_cache.pop(oldest_path).close()
                 self._file_cache[target_path] = open(target_path, file_mode)
