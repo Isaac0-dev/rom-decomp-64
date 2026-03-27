@@ -908,6 +908,12 @@ class ExtractionPipeline:
                 c_path = self.txt.get_target_path(f"{tex_rec.name}_dl")
                 filepath_to_content[c_path].append(text)
 
+        from segment2_extractor import get_segment2_processor
+
+        s2p = get_segment2_processor()
+        s2p.ctx.txt = self.txt
+        s2p.serialize(None)
+
         # 8. Skyboxes
         sp = get_skybox_processor()
         for sky_rec in self.db.skyboxes.values():
