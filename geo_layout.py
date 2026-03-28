@@ -368,6 +368,8 @@ class GeoProcessor(BaseProcessor):
                 commands_data.append((opcode, size_words * 4, words))
                 ir, is_end, next_indent = info["func"](words, cur_indent, sTxt, context_prefix)
                 ir.address = segmented_addr + pos - offset
+                if next_indent < cur_indent:
+                    cur_indent = next_indent
                 ir.indent = cur_indent
                 ir.raw_data = rom[pos : pos + size_words * 4]
                 commands_ir.append(ir)
