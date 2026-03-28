@@ -11,7 +11,7 @@ from base_processor import BaseProcessor
 from rom_database import CollisionRecord, WaterBoxRecord, CommandIR
 from context import ctx
 from constants import SURFACES
-from utils import debug_fail
+from utils import debug_fail, debug_print
 
 # --- TERRAIN Opcodes ---
 TERRAIN_LOAD_VERTICES = 0x40
@@ -307,8 +307,8 @@ def _parse_special_objects(rom: CustomBytesIO) -> List[CommandIR]:
             ir_list.append(
                 CommandIR(
                     TERRAIN_LOAD_OBJECTS,
-                    [name, x, y, z, yaw, 0],
-                    name="SPECIAL_OBJECT_WITH_YAW_AND_PARAM",
+                    [name, x, y, z, yaw],
+                    name="SPECIAL_OBJECT_WITH_YAW",
                 )
             )
         else:
@@ -337,7 +337,7 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
         )
     seg_info = where_is_segment_loaded(0x19)
     if seg_info is None:
-        print("Cannot extract water boxes because segment 0x19 is not loaded")
+        debug_print("Cannot extract water boxes because segment 0x19 is not loaded")
         return ir_list
     water_box_rec = WaterBoxRecord(
         seg_num=0x19, seg_start=seg_info[0], seg_end=seg_info[1], commands=ir_list
