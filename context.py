@@ -1,6 +1,16 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Set, Optional
-from utils import level_const_name_to_int
+from utils import level_const_name_to_int, level_num_to_const_name
+
+
+class TweakValue(int):
+    def __new__(cls, value: int, default: int):
+        obj = super().__new__(cls, value)
+        obj._default = default
+        return obj
+
+    def is_modified(self) -> bool:
+        return self != self._default
 
 
 class LevelValues:
@@ -9,19 +19,44 @@ class LevelValues:
     TWEAKS = {
         "lowest_vtx_height": (-11000, "floorLowerLimit"),
         "highest_vtx_height": (20000, "cellHeightLimit"),
-        "entry_level": (level_const_name_to_int["LEVEL_CASTLE_GROUNDS"], "entryLevel"),
+        "entry_level": (
+            level_const_name_to_int["LEVEL_CASTLE_GROUNDS"],
+            "entryLevel",
+            lambda v: level_num_to_const_name.get(v, f"LEVEL_UNKNOWN_{v}"),
+        ),
     }
 
     def __init__(self):
-        for py_name, (default, _) in self.TWEAKS.items():
-            setattr(self, py_name, default)
+        for py_name, tweak_info in self.TWEAKS.items():
+            default = tweak_info[0]
+            self.__dict__[py_name] = TweakValue(default, default)
+
+    def __setattr__(self, name, value):
+        if name in self.TWEAKS:
+            default = self.TWEAKS[name][0]
+            self.__dict__[name] = TweakValue(value, default)
+        else:
+            super().__setattr__(name, value)
+
+    def is_modified(self, field_name: str) -> bool:
+        val = getattr(self, field_name, None)
+        if val is not None and hasattr(val, "is_modified"):
+            return val.is_modified()
+        return False
 
     def get_tweaks_lua(self) -> List[str]:
         lines = []
-        for py_name, (default, lua_name) in self.TWEAKS.items():
+        for py_name, tweak_info in self.TWEAKS.items():
+            lua_name = tweak_info[1]
+            converter = tweak_info[2] if len(tweak_info) > 2 else None
+
             current_val = getattr(self, py_name)
-            if current_val != default:
-                lines.append(f"gLevelValues.{lua_name} = {current_val}\n")
+            if current_val.is_modified():
+                if converter:
+                    out_val = converter(int(current_val))
+                else:
+                    out_val = current_val
+                lines.append(f"gLevelValues.{lua_name} = {out_val}\n")
         return lines
 
 

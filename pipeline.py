@@ -930,6 +930,14 @@ class ExtractionPipeline:
         ap = get_audio_processor()
         ap.serialize(self.db.audio)
 
+        # If we didn't see any modification to the entry level, some hacks
+        # put their entry level adjustment at 0x6D6A
+        if (
+            not ctx.level_values.entry_level.is_modified()
+            and self.rom[0x6D68 : 0x6D68 + 2] == b"\x24\x05"
+        ):
+            ctx.level_values.entry_level = int.from_bytes(self.rom[0x6D6A : 0x6D6A + 2], "big")
+
         tweaks = ctx.level_values.get_tweaks_lua()
         if tweaks:
             ctx.txt.write_lua(tweaks, "tweaks.lua")

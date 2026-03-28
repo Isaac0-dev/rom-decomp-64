@@ -15,7 +15,9 @@ class MOPBehavior:
 MOP_BEHAVIORS: Dict[str, MOPBehavior] = {}
 
 
-def register_mop_behavior(name: str, lua_code: str, behavior_code: str, model_folders: list[str] | None = None):
+def register_mop_behavior(
+    name: str, lua_code: str, behavior_code: str, model_folders: list[str] | None = None
+):
     bhv = MOPBehavior(name, lua_code, behavior_code, model_folders or [])
     MOP_BEHAVIORS[name] = bhv
     return bhv
@@ -317,7 +319,8 @@ const BehaviorScript bhvFlipBlock_MOP[] = {
     SET_INT(oInteractStatus, 0),
     END_LOOP(),
 };
-""", ["FlipBlock_MOP"]
+""",
+    ["FlipBlock_MOP"],
 )
 
 register_mop_behavior(
@@ -381,7 +384,8 @@ const BehaviorScript bhvNoteblock_MOP[] = {
     CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
-""", ["Noteblock_MOP"]
+""",
+    ["Noteblock_MOP"],
 )
 
 register_mop_behavior(
@@ -443,7 +447,8 @@ const BehaviorScript bhvSandBlock_MOP[] = {
     CALL_NATIVE(bhv_sandblock_loop),
     END_LOOP(),
 };
-""", ["SandBlock_MOP"]
+""",
+    ["SandBlock_MOP"],
 )
 
 register_mop_behavior(
@@ -503,7 +508,8 @@ const BehaviorScript bhvSpring_MOP[] = {
     CALL_NATIVE(bhv_Spring_loop),
     END_LOOP(),
 };
-""", ["Spring_MOP"]
+""",
+    ["Spring_MOP"],
 )
 
 register_mop_behavior(
@@ -567,7 +573,8 @@ const BehaviorScript bhvShrink_Platform_MOP[] = {
     CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
-""", ["Shrink_Platform_MOP", "Shrink_Platform_Border_MOP"]
+""",
+    ["Shrink_Platform_MOP", "Shrink_Platform_Border_MOP"],
 )
 
 register_mop_behavior(
@@ -606,7 +613,8 @@ const BehaviorScript bhvSwitchblock_MOP[] = {
     CALL_NATIVE(bhv_Switchblock_loop),
     END_LOOP(),
 };
-""", ["Switchblock_MOP"]
+""",
+    ["Switchblock_MOP"],
 )
 
 register_mop_behavior(
@@ -666,7 +674,8 @@ const BehaviorScript bhvSwitchblock_Switch_MOP[] = {
     CALL_NATIVE(bhv_Switchblock_Switch_loop),
     END_LOOP(),
 };
-""", ["Switchblock_Switch_MOP"]
+""",
+    ["Switchblock_Switch_MOP"],
 )
 
 register_mop_behavior(
@@ -732,7 +741,8 @@ const BehaviorScript bhvFlipswap_Platform_MOP[] = {
     CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
-""", ["Flipswap_Platform_MOP", "Flipswap_Platform_Border_MOP"]
+""",
+    ["Flipswap_Platform_MOP", "Flipswap_Platform_Border_MOP"],
 )
 
 register_mop_behavior(
@@ -780,7 +790,8 @@ const BehaviorScript bhvMoving_Grid_Platform_MOP[] = {
     CALL_NATIVE(bhv_Moving_Grid_Platform_loop),
     END_LOOP(),
 };
-""", ["Moving_Grid_Platform_MOP", "Moving_Grid_Platform_Gears_MOP"]
+""",
+    ["Moving_Grid_Platform_MOP", "Moving_Grid_Platform_Gears_MOP"],
 )
 
 register_mop_behavior(
@@ -805,7 +816,8 @@ const BehaviorScript bhvMoving_Grid_Platform_Gears_MOP[] = {
     CALL_NATIVE(bhv_Moving_Grid_Platform_Gears_loop),
     END_LOOP(),
 };
-""", ["Moving_Grid_Platform_Gears_MOP"]
+""",
+    ["Moving_Grid_Platform_Gears_MOP"],
 )
 
 register_mop_behavior(
@@ -878,7 +890,8 @@ const BehaviorScript bhvGreen_Switchboard_Gears_MOP[] = {
     CALL_NATIVE(bhv_Green_Switchboard_Gears_loop),
     END_LOOP(),
 };
-""", ["Green_Switchboard_MOP", "Green_Switchboard_Gears_MOP"]
+""",
+    ["Green_Switchboard_MOP", "Green_Switchboard_Gears_MOP"],
 )
 
 register_mop_behavior(
@@ -917,7 +930,8 @@ const BehaviorScript bhvMoving_Rotating_Block_MOP[] = {
     CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
-""", ["Moving_Rotating_Block_MOP"]
+""",
+    ["Moving_Rotating_Block_MOP"],
 )
 
 register_mop_behavior(
@@ -1007,7 +1021,8 @@ const BehaviorScript bhvPSwitch_MOP[] = {
     CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
-""", []
+""",
+    [],
 )
 
 register_mop_behavior(
@@ -1044,7 +1059,8 @@ const BehaviorScript bhvCheckpoint_Flag_MOP[] = {
     CALL_NATIVE(bhv_checkpoint_flag_loop),
     END_LOOP(),
 };
-""", ["Checkpoint_Flag_MOP"]
+""",
+    ["Checkpoint_Flag_MOP"],
 )
 
 register_mop_behavior(
@@ -1090,7 +1106,8 @@ const BehaviorScript bhvFlipswitch_Panel_MOP[] = {
     CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
-""", ["Flipswitch_Panel_MOP"]
+""",
+    ["Flipswitch_Panel_MOP"],
 )
 
 register_mop_behavior(
@@ -1125,7 +1142,8 @@ const BehaviorScript bhvFlipswitch_Panel_StarSpawn_MOP[] = {
     CALL_NATIVE(bhv_flipswitch_panel_starspawn_loop),
     END_LOOP(),
 };
-""", []
+""",
+    [],
 )
 
 register_mop_behavior(
@@ -1240,7 +1258,8 @@ const BehaviorScript bhvBlargg[] = {
         CALL_NATIVE(bhv_blargg_loop),
     END_LOOP(),
 };
-""", ["blargg"]
+""",
+    ["blargg"],
 )
 
 register_mop_behavior(
@@ -1306,7 +1325,8 @@ const BehaviorScript bhvFriendlyBlargg[] = {
         CALL_NATIVE(bhv_blargg_friendly_loop),
     END_LOOP(),
 };
-""", ["blargg_friendly"]
+""",
+    ["blargg_friendly"],
 )
 
 register_mop_behavior(
@@ -1325,7 +1345,8 @@ const BehaviorScript bhvEmitter_MOP[] = {
         CALL_NATIVE(bhv_emitter_loop),
     END_LOOP(),
 };
-""", []
+""",
+    [],
 )
 
 register_mop_behavior(
@@ -1342,7 +1363,8 @@ const BehaviorScript bhvJukebox_MOP[] = {
     CALL_NATIVE(bhv_jukebox_loop),
     BREAK(),
 };
-""", []
+""",
+    [],
 )
 
 register_mop_behavior(
@@ -1359,7 +1381,8 @@ const BehaviorScript bhvShell_1_MOP[] = {
     CALL_NATIVE(bhv_shell_init),
     BREAK(),
 };
-""", []
+""",
+    [],
 )
 
 register_mop_behavior(
@@ -1376,5 +1399,6 @@ const BehaviorScript bhvShell_2_MOP[] = {
     CALL_NATIVE(bhv_shell_init),
     BREAK(),
 };
-""", []
+""",
+    [],
 )
