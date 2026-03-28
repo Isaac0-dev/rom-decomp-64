@@ -59,32 +59,32 @@ TEXT_MAP = {
 
 # Mapping from course index to macro name used in decomp headers
 COURSE_MACRO_NAMES = {
-    0: "COURSE_BOB",
-    1: "COURSE_WF",
-    2: "COURSE_JRB",
-    3: "COURSE_CCM",
-    4: "COURSE_BBH",
-    5: "COURSE_HMC",
-    6: "COURSE_LLL",
-    7: "COURSE_SSL",
-    8: "COURSE_DDD",
-    9: "COURSE_SL",
-    10: "COURSE_WDW",
-    11: "COURSE_TTM",
-    12: "COURSE_THI",
-    13: "COURSE_TTC",
-    14: "COURSE_RR",
-    15: "COURSE_BITDW",
-    16: "COURSE_BITFS",
-    17: "COURSE_BITS",
-    18: "COURSE_PSS",
-    19: "COURSE_COTMC",
-    20: "COURSE_TOTWC",
-    21: "COURSE_BOWSER_1",
-    22: "COURSE_WMOTR",
-    23: "COURSE_BOWSER_2",
-    24: "COURSE_BOWSER_3",
-    25: "COURSE_SA",
+    0: "COURSE_NONE",
+    1: "COURSE_BOB",
+    2: "COURSE_WF",
+    3: "COURSE_JRB",
+    4: "COURSE_CCM",
+    5: "COURSE_BBH",
+    6: "COURSE_HMC",
+    7: "COURSE_LLL",
+    8: "COURSE_SSL",
+    9: "COURSE_DDD",
+    10: "COURSE_SL",
+    11: "COURSE_WDW",
+    12: "COURSE_TTM",
+    13: "COURSE_THI",
+    14: "COURSE_TTC",
+    15: "COURSE_RR",
+    16: "COURSE_BITDW",
+    17: "COURSE_BITFS",
+    18: "COURSE_BITS",
+    19: "COURSE_PSS",
+    20: "COURSE_COTMC",
+    21: "COURSE_TOTWC",
+    22: "COURSE_VCUTM",
+    23: "COURSE_WMOTR",
+    24: "COURSE_SA",
+    25: "COURSE_CAKE_END",
 }
 
 
@@ -517,16 +517,17 @@ def export_text(output_manager):
             )
         if course_strings:
             for course_idx, name in enumerate(course_strings):
-                macro = COURSE_MACRO_NAMES.get(course_idx, str(course_idx))
+                course_idx_offset = course_idx + 1
+                macro = COURSE_MACRO_NAMES.get(course_idx_offset, str(course_idx_offset))
                 if course_idx < 15 and act_strings:
-                    acts = act_strings[course_idx * 6 : (course_idx + 1) * 6]
+                    acts = act_strings[course_idx * 6 : course_idx_offset * 6]
                     acts_fmt = ", ".join([lua_escape(act) for act in acts])
                     lua_course_lines.append(
                         f'smlua_text_utils_course_acts_replace({macro}, "{sanitize_course(name)}", {acts_fmt})\n'
                     )
                 elif course_idx < 25:
                     lua_course_lines.append(
-                        f'smlua_text_utils_secret_star_replace({course_idx}, "{sanitize_course(name)}")\n'
+                        f'smlua_text_utils_secret_star_replace({macro}, "{sanitize_course(name)}")\n'
                     )
                 else:
                     lua_course_lines.append(
