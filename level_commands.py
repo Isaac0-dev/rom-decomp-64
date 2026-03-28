@@ -716,11 +716,29 @@ def OBJECT_WITH_ACTS(values):
         },
     )
 
+    ret = None
     if is_object:
-        return format_output("OBJECT", params, take_snapshot=True)
+        ret = format_output("OBJECT", params, take_snapshot=True)
     else:
         params.append(format_param_hex("acts", acts, 1))
-        return format_output("OBJECT_WITH_ACTS", params, take_snapshot=True)
+        ret = format_output("OBJECT_WITH_ACTS", params, take_snapshot=True)
+
+    # Empty objects
+    # these seem to be common in editor hacks
+    if (
+        model == 0
+        and posX == 0
+        and posY == 0
+        and posZ == 0
+        and angleX == 0
+        and angleY == 0
+        and angleZ == 0
+        and behParam == 0
+        and beh == 0x13000000  # detected as a sliding star door usually
+    ):
+        ret.comment = "// "
+
+    return ret
 
 
 def MARIO(values):
