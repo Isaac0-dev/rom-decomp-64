@@ -260,6 +260,34 @@ class OutputManager:
 
             return target_path
 
+    def copy_mop_actors(self, actor_folders: list[str]):
+        import shutil
+        import zipfile
+
+        target_actors_dir = os.path.join(self.base_path, "actors")
+        self._ensure_dir(target_actors_dir)
+
+        zip_path = os.path.join(os.path.dirname(__file__), "data", "mop_actors.zip")
+        if os.path.exists(zip_path):
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                all_files = zf.namelist()
+                for folder in actor_folders:
+                    for filename in all_files:
+                        is_match = False
+                        dest_rel = None
+                        if filename.startswith(f"{folder}/"):
+                            dest_rel = filename
+                            is_match = True
+
+                        if is_match and dest_rel:
+                            dest_path = os.path.join(target_actors_dir, dest_rel)
+                            if filename.endswith("/"):  # directory entry
+                                os.makedirs(dest_path, exist_ok=True)
+                            else:
+                                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                                with zf.open(filename) as source, open(dest_path, "wb") as target:
+                                    shutil.copyfileobj(source, target)
+
     def close(self):
         # Wait for any registered async tasks to finish before tearing down handles.
         futures = []

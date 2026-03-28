@@ -22,12 +22,40 @@ from behavior_hashes import KNOWN_BEHAVIOR_HASHES
 from model_ids import MODEL_ID_BY_VALUE, _MODEL_ID_BY_LEVEL
 from data.expected_pairings import BEHAVIOR_TO_MODELS, MODEL_TO_BEHAVIORS
 from utils import debug_print
+from context import ctx
 
 BEHAVIOR_ADDR_OVERRIDES = {
     0x401700: "RM_Scroll_Texture",
     0x400000: "RM_Scroll_Texture",
     0x402300: "editor_Scroll_Texture",
     0x13003420: "editor_Scroll_Texture2",
+}
+
+MOP_ADDRESSES = {
+    (0xF0, 0x130050D0): ["bhvFlipBlock_MOP", 0x0302272C],
+    (0x2F, 0x13000278): ["bhvFlipswap_Platform_MOP", 0x005F9AC0],
+    (0x2A, 0x130005D8): ["bhvFlipswitch_Panel_MOP", 0x005F9FE0],
+    (0x2B, 0x13000CFC): ["bhvGreen_Switchboard_MOP", 0x005FD8B0],
+    (0x2D, 0x13000D24): ["bhvMoving_Rotating_Block_MOP", 0x00603670],
+    (0x2E, 0x13000D50): ["bhvCheckpoint_Flag_MOP", 0x00606660],
+    (0, 0x13000D50): [
+        "bhvCheckpoint_Flag_MOP",
+        0x00606660,
+    ],  # repeated because its an often enough case
+    (0x7B, 0x13000174): ["bhvNoteblock_MOP", 0x0301DBF8],
+    (0xCF, 0x1300512C): ["bhvPSwitch_MOP", 0x0F0004CC],
+    (0x99, 0x1300064C): ["bhvSandBlock_MOP", 0x030225E4],
+    (0x9B, 0x13004218): ["bhvShell_1_MOP", 0x0F000ADC],
+    (0x9D, 0x13004218): ["bhvShell_2_MOP", 0x0F000B08],
+    (0x98, 0x13000624): ["bhvShrink_Platform_MOP", 0x030212F4],
+    (0x92, 0x130005B4): ["bhvSpring_MOP", 0x0301FC98],
+    (0xF2, 0x13003AE0): ["bhvSwitchblock_Switch_MOP", 0x03022708],
+    (0xF1, 0x13004EA0): ["bhvSwitchblock_MOP", 0x030226D4],
+    # (0xB5, 0x13001608): ["bhvTrampoline_MOP", 0x0C000000],  # not implemented
+    (0x54, 0x130023D0): ["bhvBeta_Blarrg_MOP", 0x0C000224],
+    (0, 0x130002A0): ["bhvFlipswitch_Panel_StarSpawn_MOP", None],
+    (0, 0x13005104): ["bhvJukebox_MOP", None],
+    (0, 0x130050B4): ["bhvEmitter_MOP", None],
 }
 
 # Patch some behaviour names that are different in coop (refresh versions)
@@ -231,6 +259,13 @@ class ObjectCorrelationPass(DatabaseAnalysisPass):
             def add_candidate(name, weight):
                 if name:
                     candidates[name] = candidates.get(name, 0.0) + weight
+
+            # Check for MOP objects
+            for (model_id, seg_addr), (name, rom_addr) in MOP_ADDRESSES.items():
+                if seg_addr == beh.seg_addr:
+                    add_candidate(name, 1.0)
+                    if name not in ctx.found_mops:
+                        ctx.found_mops.add(name)
 
             # 1. Address Overrides (Highest priority)
             if segmented_addr in BEHAVIOR_ADDR_OVERRIDES:

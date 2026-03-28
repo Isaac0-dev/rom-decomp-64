@@ -58,6 +58,8 @@ class ExtractionContext:
     pending_locs: Set[int] = field(default_factory=set)
     pending_areas: List[tuple] = field(default_factory=list)
 
+    found_mops: Set[str] = field(default_factory=set)
+
     reached_end: bool = False
 
     _pending_record: Any = None

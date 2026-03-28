@@ -934,12 +934,33 @@ class ExtractionPipeline:
         if tweaks:
             ctx.txt.write_lua(tweaks, "tweaks.lua")
 
+        # Handle MOP objects
+        if ctx.found_mops:
+            from mop import MOP_BEHAVIORS, MOP_SHARED_LUA
+
+            mop_lua_chunks = [MOP_SHARED_LUA]
+            mop_c_chunks = []
+            mop_actor_folders = set()
+
+            for object in ctx.found_mops:
+                if object in MOP_BEHAVIORS:
+                    mop_data = MOP_BEHAVIORS[object]
+                    mop_lua_chunks.append(f"-- {mop_data.name}\n{mop_data.lua_code}\n")
+                    mop_c_chunks.append(f"// {mop_data.name}\n{mop_data.behavior_code}\n")
+                    if mop_data.model_folders:
+                        mop_actor_folders.update(mop_data.model_folders)
+
+            ctx.txt.write_lua(mop_lua_chunks, "mop.lua")
+            ctx.txt.create_file("data/behavior_data.c", content="\n".join(mop_c_chunks))
+
+            if mop_actor_folders:
+                ctx.txt.copy_mop_actors(list(mop_actor_folders))
+
         # 10. Write all accumulated content to disk
-        if self.txt:
-            for path, contents in filepath_to_content.items():
-                # Join all chunks of code for this specific file
-                full_text = "\n\n".join(contents)
-                self.txt.create_file(path, full_text)
+        for path, contents in filepath_to_content.items():
+            # Join all chunks of code for this specific file
+            full_text = "\n\n".join(contents)
+            self.txt.create_file(path, full_text)
 
     # ------------------------------------------------------------------
     # Final pass: summarise + close
