@@ -259,6 +259,8 @@ level_num_to_const_name: Dict[int, str] = {
     )
 }
 
+level_const_name_to_int: Dict[str, int] = {v: k for k, v in level_num_to_const_name.items()}
+
 VANILLA_SHA1: str = "9bef1128717f958171a4afac3ed78ee2bb4e86ce"
 
 

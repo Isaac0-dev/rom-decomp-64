@@ -930,6 +930,10 @@ class ExtractionPipeline:
         ap = get_audio_processor()
         ap.serialize(self.db.audio)
 
+        tweaks = ctx.level_values.get_tweaks_lua()
+        if tweaks:
+            ctx.txt.write_lua(tweaks, "tweaks.lua")
+
         # 10. Write all accumulated content to disk
         if self.txt:
             for path, contents in filepath_to_content.items():

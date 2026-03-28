@@ -369,12 +369,7 @@ def SET_REG(values):
 
         match = level_script_check_match(ctx.script_cmd_history[-1])
         if match == "level_main_menu_entry_1":
-            ctx.txt.write_lua(
-                [
-                    f"gLevelValues.entryLevel = {level_num_to_const_name.get(value, f'LEVEL_UNKNOWN_{value}')}\n"
-                ],
-                "tweaks.lua",
-            )
+            ctx.level_values.entry_level = value
 
     params = [
         format_param_hex("value", value, 2),

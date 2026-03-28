@@ -1,5 +1,28 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Set, Optional
+from utils import level_const_name_to_int
+
+
+class LevelValues:
+    # This makes it easy to add level-based tweaks that automatically
+    # appear in tweaks.lua if their values differ from the default.
+    TWEAKS = {
+        "lowest_vtx_height": (-11000, "floorLowerLimit"),
+        "highest_vtx_height": (20000, "cellHeightLimit"),
+        "entry_level": (level_const_name_to_int["LEVEL_CASTLE_GROUNDS"], "entryLevel"),
+    }
+
+    def __init__(self):
+        for py_name, (default, _) in self.TWEAKS.items():
+            setattr(self, py_name, default)
+
+    def get_tweaks_lua(self) -> List[str]:
+        lines = []
+        for py_name, (default, lua_name) in self.TWEAKS.items():
+            current_val = getattr(self, py_name)
+            if current_val != default:
+                lines.append(f"gLevelValues.{lua_name} = {current_val}\n")
+        return lines
 
 
 @dataclass
@@ -15,6 +38,8 @@ class ExtractionContext:
     txt: Any = None
     db: Any = None
     current_context_prefix: Optional[str] = None
+
+    level_values: LevelValues = field(default_factory=LevelValues)
 
     first_command_in_script: bool = True
     first_cmd: Optional[int] = None

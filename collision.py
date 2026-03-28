@@ -223,6 +223,8 @@ def _parse_vertices(rom: CustomBytesIO) -> Tuple[List[CommandIR], List[Tuple[int
     for _ in range(vcount):
         x, y, z = struct.unpack(">3h", rom.read(6))
         verts.append((x, y, z))
+        ctx.level_values.lowest_vtx_height = min(ctx.level_values.lowest_vtx_height, y)
+        ctx.level_values.highest_vtx_height = max(ctx.level_values.highest_vtx_height, y)
         ir_list.append(CommandIR(TERRAIN_LOAD_VERTICES, [x, y, z], name="COL_VERTEX"))
     return ir_list, verts
 
