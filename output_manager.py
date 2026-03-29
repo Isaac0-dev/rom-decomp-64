@@ -57,6 +57,7 @@ class OutputManager:
         self._futures = []
 
         self._created_dirs = set()
+        self._target_path_cache = {}
 
         # Make sure output directories exist
         self.levels_dir = os.path.join(base_path, "levels")
@@ -105,6 +106,10 @@ class OutputManager:
         Determines the relative output path (subfolders + filename) for
         a given context name.
         """
+        cache_key = (context, ctx.curr_level if ctx else -1, ctx.curr_area if ctx else -1)
+        if cache_key in self._target_path_cache:
+            return self._target_path_cache[cache_key]
+
         if context is None:
             filename = "misc.c.txt"
         elif "dl" in context or "vertex" in context or "light" in context:
@@ -188,7 +193,9 @@ class OutputManager:
                             target_dir = level_dir
                         break
 
-        return os.path.join(target_dir, filename)
+        res = os.path.join(target_dir, filename)
+        self._target_path_cache[cache_key] = res
+        return res
 
     def write(self, ctx, type, context, content):
         with self.lock:

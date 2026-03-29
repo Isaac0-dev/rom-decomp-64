@@ -75,7 +75,6 @@ class ExtractionPipeline:
         self.pass_text()  # text/dialog export (async-capable)
         self.pass_level_scripts()  # parse entry scripts
         # self.pass_trajectory_scan()  # Disabled for debug purposes
-        self.pass_global_candidates()  # resolve JUMP_LINK targets
 
         # Refinement passes — operate on the fully-populated db
         self.pass_refine_behaviors()
@@ -489,6 +488,12 @@ class ExtractionPipeline:
         # Import local byte-pattern helpers from extract.py
         # (kept there to avoid duplication)
         from extract import INIT_LEVEL, SLEEP, BLACKOUT, JUMP
+        from level_script import (
+            init_level_script_parsing,
+            parse_level_script,
+            process_global_candidates,
+            expand_level_script_into,
+        )
 
         candidates = find_all_needles_in_haystack(self.rom.getvalue(), INIT_LEVEL())
         results = []
@@ -531,31 +536,42 @@ class ExtractionPipeline:
                 debug_print(f"Found entry level script at 0x{start:08x}")
                 self.rom.seek(self._prev_offset, 0)
 
-                from level_script import init_level_script_parsing, parse_level_script
-
                 init_level_script_parsing(self.rom, self.txt)
                 parse_level_script(start)
 
+        process_global_candidates(self.txt)
+
+        # Expand global scripts that need it
+        for addr, script in list(self.db.level_scripts.items()):
+            # Identify all model ids used in this script
+            used_model_ids = set()
+            for cmd in script.commands:
+                if cmd.name in [
+                    "OBJECT",
+                    "OBJECT_WITH_ACTS",
+                ]:  # TODO: should implement macro objects here
+                    used_model_ids.add(cmd.params[0])
+
+            i = 0
+            while i < len(script.commands):
+                cmd = script.commands[i]
+
+                if cmd.name == "AREA":
+                    # We've gone too far, there won't
+                    # be any EXPANDED_GLOBAL_SCRIPT commands here
+                    break
+
+                # Expand jump links only inside AREA blocks
+                if cmd.name == "EXPANDED_GLOBAL_SCRIPT":
+                    level_script = cmd.params[0]
+                    expand_level_script_into(script, cmd.indent, level_script, i)
+
+                    # Do not increment i; re-process the new commands at this position
+                    continue
+
+                i += 1
+
         self._status("level_scripts", "done")
-
-    # ------------------------------------------------------------------
-    # Pass 6: Global candidates (JUMP_LINK targets)
-    # ------------------------------------------------------------------
-
-    def pass_global_candidates(self) -> None:
-        """Process any JUMP_LINK targets recorded during level script parsing."""
-        from utils import debug_print
-
-        assert self.txt is not None
-
-        try:
-            from level_script import process_global_candidates
-
-            process_global_candidates(self.txt)
-        except Exception:
-            debug_print("process_global_candidates failed or not present")
-        else:
-            self._status("level_scripts", "globals_done")
 
     # ------------------------------------------------------------------
     # Pass 5b: Trajectory Scan (Optional/Disabled)
@@ -629,7 +645,7 @@ class ExtractionPipeline:
         for addr, script in list(self.db.level_scripts.items()):
             # Skip over non-master scripts, and prune unreferenced ones
             if not (script.name.startswith("level_") and script.name.endswith("_entry")):
-                if addr not in referenced_scripts:
+                if addr not in referenced_scripts and "script_func_global_" not in script.name:
                     self.db.level_scripts.pop(addr)
                 continue
 
@@ -655,20 +671,15 @@ class ExtractionPipeline:
                 if cmd.name == "JUMP_LINK" and in_area_block:
                     level_script = cmd.params[0]
 
-                    # Ensure we have a valid record with commands to expand
-                    if hasattr(level_script, "commands"):
-                        level_script_cmds = level_script.commands[0:-1]  # skip return
+                    from level_script import expand_level_script_into
 
-                        # copy indentation across
-                        for command in level_script_cmds:
-                            command.indent = cmd.indent
-                        script.commands[i : i + 1] = level_script_cmds
+                    expand_level_script_into(script, cmd.indent, level_script, i)
 
-                        # remove the original level script from the database
-                        self.db.level_scripts.pop(level_script.script_addr, None)
+                    # remove the original level script from the database
+                    self.db.level_scripts.pop(level_script.script_addr, None)
 
-                        # Do not increment i; re-process the new commands at this position
-                        continue
+                    # Do not increment i; re-process the new commands at this position
+                    continue
 
                 i += 1
 

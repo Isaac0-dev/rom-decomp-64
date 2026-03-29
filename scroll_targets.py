@@ -112,13 +112,13 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
     vtx_buffers = []
     collected_verts = 0
 
-    for (seg_addr, count, start, end, parent_dl), (name, actual_count) in sorted(
-        vp.parsed_vertices.items(), key=lambda x: x[0][0]
-    ):
-        # Filter out vertices that don't come from the expected segment
-        if start != cur_start:
-            continue
+    vtx_list = vp.parsed_vertices_by_segment.get(cur_start, [])
+    if not vtx_list:
+        return None
 
+    for (seg_addr, count, start, end, parent_dl), (name, actual_count) in sorted(
+        vtx_list, key=lambda x: x[0][0]
+    ):
         # Check for overlap with the target span
         buf_begin = seg_addr
         buf_end = seg_addr + actual_count * 0x10

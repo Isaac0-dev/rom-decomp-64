@@ -550,14 +550,22 @@ def G_TRANS_ROT(ls, i, s, c):
         ry, rz = CMD_HH_unpack_s(ls[2])
         if param & 0x80:
             dl = get_dl_name(ls[3], s, c)
-            return CommandIR(0x10, [layer_name, rx, ry, rz, dl], name="GEO_ROTATE_WITH_DL"), False, i
+            return (
+                CommandIR(0x10, [layer_name, rx, ry, rz, dl], name="GEO_ROTATE_WITH_DL"),
+                False,
+                i,
+            )
         return CommandIR(0x10, [layer_name, rx, ry, rz], name="GEO_ROTATE"), False, i
     if p == 0x10:  # TRANS
         tx, ty = CMD_HH_unpack_s(ls[1])
         tz, _ = CMD_HH_unpack_s(ls[2])
         if param & 0x80:
             dl = get_dl_name(ls[3], s, c)
-            return CommandIR(0x10, [layer_name, tx, ty, tz, dl], name="GEO_TRANSLATE_WITH_DL"), False, i
+            return (
+                CommandIR(0x10, [layer_name, tx, ty, tz, dl], name="GEO_TRANSLATE_WITH_DL"),
+                False,
+                i,
+            )
         return CommandIR(0x10, [layer_name, tx, ty, tz], name="GEO_TRANSLATE"), False, i
     # TRANS_ROT
     tx, ty, tz, rx, ry, rz = CMD_HHHHHH_unpack_s(ls[1:4])
@@ -630,7 +638,9 @@ def G_BILL_PARAMS(ls, i, s, c):
         dl = get_dl_name(ls[2], s, c) if len(ls) > 2 else "NULL"
         if dl != "NULL":
             return (
-                CommandIR(0x14, [layer_name, tx, ty, tz, dl], name="GEO_BILLBOARD_WITH_PARAMS_AND_DL"),
+                CommandIR(
+                    0x14, [layer_name, tx, ty, tz, dl], name="GEO_BILLBOARD_WITH_PARAMS_AND_DL"
+                ),
                 False,
                 i,
             )
@@ -727,7 +737,11 @@ def G_SCALE(ls, i, s, c):
     scale = ls[1]
     if param & 0x80:
         dl = get_dl_name(ls[2], s, c)
-        return CommandIR(0x1D, [layer_name, f"0x{scale:08X}", dl], name="GEO_SCALE_WITH_DL"), False, i
+        return (
+            CommandIR(0x1D, [layer_name, f"0x{scale:08X}", dl], name="GEO_SCALE_WITH_DL"),
+            False,
+            i,
+        )
     return CommandIR(0x1D, [layer_name, f"0x{scale:08X}"], name="GEO_SCALE"), False, i
 
 

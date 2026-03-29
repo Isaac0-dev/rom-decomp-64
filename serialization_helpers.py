@@ -1,6 +1,7 @@
 from typing import List
 from rom_database import CommandIR, RomDatabase
 from context import LevelAreaContext
+from microcode import create_microcode
 
 # Mapping of opcodes to formatting functions for Geo Layouts
 GEO_OPCODE_NAMES = {
@@ -275,8 +276,6 @@ def serialize_gfx_command(
     cmd: CommandIR, db: RomDatabase, location: LevelAreaContext, microcode_name: str = "GBI0"
 ) -> str:
     """Convert a Gfx (Display List) CommandIR back into a C macro string."""
-    from microcode import create_microcode
-
     ucode = create_microcode(microcode_name)
     return ucode.serialize_command(cmd, db, location)
 
@@ -289,9 +288,10 @@ def serialize_gfx_layout(
     microcode_name: str = "GBI0",
 ) -> str:
     """Serialize a full DisplayListRecord into a C file string."""
+    ucode = create_microcode(microcode_name)
     lines = [f"const Gfx {dl_name}[] = {{"]
     for cmd in commands:
-        lines.append(serialize_gfx_command(cmd, db, location, microcode_name) + ",")
+        lines.append(ucode.serialize_command(cmd, db, location) + ",")
     lines.append("};")
     return "\n".join(lines)
 

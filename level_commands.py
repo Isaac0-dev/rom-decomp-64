@@ -189,6 +189,8 @@ def JUMP(values):
 
 
 def JUMP_LINK(values):
+    from level_script import pending_parse
+
     _, _, offset = CMD_BBH(values)
     location = CMD_PTR(values)
 
@@ -205,12 +207,25 @@ def JUMP_LINK(values):
     location_name = None
 
     matched_name = None
+    symbol_name, hash_name = None, None
     if ctx.curr_area == -1:
         from level_script import match_script_func_global
 
-        matched_name = match_script_func_global(location)
-
-    from level_script import pending_parse
+        results = match_script_func_global(location)
+        if results:
+            symbol_name, hash_name = results
+            if symbol_name is None and hash_name is None:
+                pass
+            elif symbol_name == hash_name:
+                matched_name = symbol_name
+            elif hash_name is not None and symbol_name is None:
+                matched_name = hash_name
+            elif symbol_name is not None and hash_name is None:
+                # If this happens it means the script was modified
+                # We'll handle that by expanding the whole
+                # global script into this script
+                script = pending_parse(location)
+                return format_output("EXPANDED_GLOBAL_SCRIPT", [script])
 
     if matched_name:
         pending_parse(location)

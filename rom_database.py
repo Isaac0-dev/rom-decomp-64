@@ -487,7 +487,7 @@ class VertexRecord:
     seg_addr: int = 0
     name: str = ""
     count: int = 0
-    pos_data: List[Tuple[int, int, int]] = field(default_factory=list)
+    vtx_data: bytes = b""
     script_text: str = ""
 
     location: LevelAreaContext = field(default_factory=LevelAreaContext)

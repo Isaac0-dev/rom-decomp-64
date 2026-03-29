@@ -7,8 +7,8 @@ from segment import (
     segment_from_addr,
     where_is_segment_loaded,
 )
-from utils import read_int
 from typing import Any, Dict, List, Optional
+import struct
 from microcode import create_microcode
 from base_processor import BaseProcessor
 from rom_database import DisplayListRecord, CommandIR
@@ -56,7 +56,7 @@ class Disassembler:
         )
         self.commands.append(ir)
 
-    def parse_dl(self, address: int) -> str:
+    def parse_dl(self, address: int) -> Optional[DisplayListRecord]:
         return parse_display_list(address, self.sTxt, self.context_prefix)
 
 
@@ -99,22 +99,27 @@ def parse_display_list_from_data(
     old = current_microcode
     if force_microcode:
         current_microcode = create_microcode(force_microcode)
+
+    # Ensure we have a microcode loaded if none was forced or already active
+    if current_microcode is None:
+        current_microcode = create_microcode("F3D")
+
     try:
         dis = Disassembler(sTxt, context_prefix)
-        stream.seek(start_offset)
-        while True:
-            if stream.tell() + 8 > len(stream.getvalue()):
-                break
-            pos = stream.tell()
-            w0 = read_int(stream)
-            w1 = read_int(stream)
-            if w0 is None or w1 is None:
-                break
+        data = stream.getvalue()
+
+        # We start from start_offset and iterate through 8-byte commands
+        pos = start_offset
+        while pos + 8 <= len(data):
+            w0, w1 = struct.unpack_from(">II", data, pos)
+
             if w0 == 0x01010101 and w1 == 0x01010101:
                 break
             handler = current_microcode.get_handler(w0)
             dis.start_command(pos, w0, w1)
             handler(w0, w1, dis)
+            pos += 8
+
             if (
                 dis.end_dl
                 or dis.branch_taken

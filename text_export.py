@@ -102,7 +102,14 @@ for val in range(256):
         DECODE_TABLE[val] = TEXT_MAP.get(val)
 
 
+_decode_cache = {}
+
+
 def _decode_string(seg2, offset, max_len=800):
+    cache_key = (id(seg2), offset, max_len)
+    if cache_key in _decode_cache:
+        return _decode_cache[cache_key]
+
     seg_len = len(seg2)
     if offset < 0 or offset >= seg_len:
         return None
@@ -113,22 +120,23 @@ def _decode_string(seg2, offset, max_len=800):
         end_limit = seg_len
     end_pos = seg2.find(b"\xff", offset, end_limit)
     if end_pos == -1:
+        _decode_cache[cache_key] = None
         return None
 
     # Decode the string
     chars: List[str] = []
     table = DECODE_TABLE
-    if isinstance(seg2, memoryview):
-        raw_source = seg2[offset:end_pos]
-    else:
-        raw_source = seg2[offset:end_pos]
+    raw_source = seg2[offset:end_pos]
 
     for b in raw_source:
         ch = table[b]
         if ch is None:
+            _decode_cache[cache_key] = None
             return None
         chars.append(ch)
-    return "".join(chars)
+    res = "".join(chars)
+    _decode_cache[cache_key] = res
+    return res
 
 
 _text_executor = ThreadPoolExecutor(max_workers=os.cpu_count())

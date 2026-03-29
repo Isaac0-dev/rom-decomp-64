@@ -1,4 +1,4 @@
-from typing import Set, Tuple, Any
+from typing import Set, Tuple, Any, Optional
 from context import ctx
 import hashlib
 from segment import (
@@ -16,20 +16,15 @@ from utils import (
     debug_fail,
     is_debug_mode,
 )
-from script_definitions import GLOBAL_SCRIPT_SIGNATURES, GLOBAL_SIGNATURE_HASHES
+from script_definitions import GLOBAL_SCRIPT_SIGNATURES
 from base_processor import BaseProcessor
 from rom_database import LevelRecord, CommandIR
 from byteio import CustomBytesIO
+from address_map import get_physical_symbol, SymbolType
 
 # --- Original Global State ---
 parsed_scripts: Set[Tuple[int, str]] = set()
-
-global_signatures = {}
-global_signature_hash = {}
-for name, toks in GLOBAL_SCRIPT_SIGNATURES.items():
-    key = tuple(toks)
-    global_signatures[key] = name
-global_signature_hash = GLOBAL_SIGNATURE_HASHES
+_scripts_in_progress: Set[int] = set()  # Guard against re-entrant parse loops
 
 # --- Original Error Handling System ---
 PARSE_STATS = {
@@ -46,7 +41,11 @@ class LevelScriptError(Exception):
     def __init__(self, root_exc, locations=None):
         self.root_exc = root_exc
         self.locations = locations or []
-        super().__init__(str(self))
+        try:
+            msg = str(self)
+        except Exception:
+            msg = repr(root_exc)
+        super().__init__(msg)
 
     def add_location(self, loc):
         if not self.locations or self.locations[-1] != loc:
@@ -96,10 +95,24 @@ def print_parse_summary():
 
 
 class LevelScriptProcessor(BaseProcessor):
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[LevelRecord]:
         """Refactored version of process_level_script and parse_level_script."""
         global _current_script_had_error
         label = kwargs.get("label")
+        label_non_recursive = kwargs.get("label_non_recursive")
+
+        seg_phys_start = segmented_to_virtual(segmented_addr)
+
+        if seg_phys_start in self.ctx.db.level_scripts:
+            return self.ctx.db.level_scripts[seg_phys_start]
+
+        # Guard: if this exact address is already being parsed higher on the call stack,
+        # we have a JUMP that points into itself (circular). Return None instead of looping.
+        if seg_phys_start in _scripts_in_progress:
+            debug_print(
+                f"WARNING: Circular script reference detected at 0x{segmented_addr:08x} – skipping"
+            )
+            return None
 
         # 1. Load data
         segment_num = segment_from_addr(segmented_addr)
@@ -107,11 +120,10 @@ class LevelScriptProcessor(BaseProcessor):
         if data is None:
             _mark_error()
             debug_fail(f"end of the road: failed to load 0x{segmented_addr:08x}")
-            return label or f"level_script_fail_0x{segmented_addr:08X}"
+            return None
 
         rom = CustomBytesIO(data)
         seg_offset = offset_from_segment_addr(segmented_addr)
-        seg_phys_start = segmented_to_virtual(segmented_addr)
 
         # 2. Setup parsing state
         prev_indent = ctx.indent
@@ -127,10 +139,14 @@ class LevelScriptProcessor(BaseProcessor):
             ctx.deferred.model_table.update(prev_deferred.model_table)
         ctx._pending_record = None
 
+        _scripts_in_progress.add(seg_phys_start)
         try:
+            script_name = ""
             if label:
-                ctx.level_script_tracker.append(label)
-                script_name = f"{label}_script_0x{seg_phys_start:x}"
+                script_name = label
+                # script_name = f"{label}_script_0x{seg_phys_start:x}"
+            elif label_non_recursive:
+                script_name = label_non_recursive
             else:
                 prefix = None
                 for part in reversed(ctx.level_script_tracker):
@@ -145,7 +161,7 @@ class LevelScriptProcessor(BaseProcessor):
                     if prefix
                     else f"level_script_0x{seg_phys_start:x}"
                 )
-                ctx.level_script_tracker.append(script_name)
+            ctx.level_script_tracker.append(script_name)
 
             name = f"{ctx.level_script_tracker[-1]}_entry"
             if (
@@ -178,7 +194,6 @@ class LevelScriptProcessor(BaseProcessor):
                     )
                 except Exception as e:
                     e = _wrap_script_exception(e, seg_phys_start)
-                    debug_print(str(e))
                     _mark_error()
                     raise e
 
@@ -193,20 +208,14 @@ class LevelScriptProcessor(BaseProcessor):
             if prev_deferred is not None and ctx.deferred is not None:
                 prev_deferred.model_table.update(ctx.deferred.model_table)
 
-            if self.ctx.db:
-                record = LevelRecord(name=name, script_addr=seg_phys_start, commands=commands_ir)
-                record.history = ctx.level_script_tracker[::-1]
-                self.ctx.db.level_scripts[seg_phys_start] = record
-                self.ctx.db.set_symbol(seg_phys_start, name, "LevelScript")
-                return record
-            return name
-
-        except Exception as e:
-            debug_print(str(e))
-            _mark_error()
-            raise e
+            record = LevelRecord(name=name, script_addr=seg_phys_start, commands=commands_ir)
+            record.history = ctx.level_script_tracker[::-1]
+            ctx.db.level_scripts[seg_phys_start] = record
+            ctx.db.set_symbol(seg_phys_start, name, "LevelScript")
+            return record
 
         finally:
+            _scripts_in_progress.discard(seg_phys_start)
             ctx.script_cmd_history.pop()
             ctx.level_script_tracker.pop()
             ctx.indent = prev_indent
@@ -217,6 +226,9 @@ class LevelScriptProcessor(BaseProcessor):
         history_comment = ""
         if hasattr(record, "history") and record.history:
             history_comment = "// " + " -> ".join(record.history[::-1]) + "\n"
+
+        def _param_to_str(p):
+            return "NULL" if p is None else str(p)
 
         output = history_comment
         output += f"const LevelScript {record.name}[] = {{\n"
@@ -235,7 +247,7 @@ class LevelScriptProcessor(BaseProcessor):
                 )  # 6 words, 2 spaces and 4 special chars
                 prefix = bytes_comment + (" " * int((chars - len(bytes_comment)) + 4)) + prefix
 
-            params_str = ", ".join(map(str, ir.params))
+            params_str = ", ".join(_param_to_str(p) for p in ir.params)
             output += f"{prefix}{comment}{ir.name}({params_str}),\n"
         output += "};\n"
         if self.ctx.txt:
@@ -263,6 +275,7 @@ def is_cmd_terminator(cmd):
 def quick_level_script_parse(rom):
     prev_offset = rom.tell()
     cmds = []
+    total_script_size = 0
     while True:
         header = read_int(rom)
         if not header:
@@ -277,8 +290,9 @@ def quick_level_script_parse(rom):
         if is_cmd_terminator(name):
             break
         rom.seek(int(size) - 4, 1)
+        total_script_size += int(size)
     rom.seek(prev_offset, 0)
-    return cmds
+    return cmds, total_script_size
 
 
 def level_script_check_match(cmd_list):
@@ -300,6 +314,17 @@ def level_script_check_match(cmd_list):
     return None
 
 
+def expand_level_script_into(dest: LevelRecord, indent: int, src: LevelRecord, index: int):
+    command_count = 0
+    for command in src.commands:
+        command.indent = indent
+        if len(command.params) > 0 and isinstance(command.params[0], LevelRecord):
+            command_count += expand_level_script_into(dest, indent, command.params[0], index)
+        command_count += 1
+    dest.commands[index : index + 1] = src.commands[0:-1]  # skip return
+    return command_count
+
+
 def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
     from level_commands import parse_command_table, CMD_BBH
 
@@ -316,7 +341,7 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
         ctx.first_cmd = command
         if command == 0x3C:  # GET_OR_SET
             rom.seek(prev_offset, 0)
-            pre_cmds = quick_level_script_parse(rom)
+            pre_cmds, _ = quick_level_script_parse(rom)
             if pre_cmds != 1:
                 match = level_script_check_match(pre_cmds)
                 if match:
@@ -390,15 +415,8 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
         raise _wrap_script_exception(e, curr_phys)
 
 
-def pending_parse(start, end=-1, label=None):
-    seg_phys = segmented_to_virtual(start)
-    for s, name in parsed_scripts:
-        if seg_phys == s:
-            return name
-    try:
-        return get_level_processor().parse(start, label=label)
-    except Exception:
-        return label or f"level_script_fail_0x{start:08X}"
+def pending_parse(start, end=-1, label=None, label_non_recursive=None):
+    return get_level_processor().parse(start, label=label, label_non_recursive=label_non_recursive)
 
 
 def parse_level_script(start_offset, segmented_addr=None, label=None):
@@ -527,12 +545,43 @@ def match_script_func_global(segmented_addr):
     if not tokens:
         return None
 
-    key = tuple(tokens)
-    if key in global_signatures:
-        return global_signatures[key]
+    seg_num = segment_from_addr(segmented_addr)
+    seg_offset = offset_from_segment_addr(segmented_addr)
 
-    h = hashlib.sha1((",".join(tokens)).encode("utf-8")).hexdigest()
-    return global_signature_hash.get(h)
+    seg_data = get_segment(seg_num)
+    if seg_data is None:
+        return None
+
+    seg_info = where_is_segment_loaded(seg_num)
+    if seg_info is None:
+        return None
+    start, end = seg_info
+
+    phys_addr = start + seg_offset
+    symbol = get_physical_symbol(phys_addr, SymbolType.SYMBOL_TYPE_LVL_SCRIPT)
+
+    # get data
+    seg_io = CustomBytesIO(seg_data)
+    seg_io.seek(seg_offset, 0)
+    result = quick_level_script_parse(seg_io)
+    if not isinstance(result, tuple):
+        size = 0
+    else:
+        _, size = result
+    data = (
+        seg_data[seg_offset : seg_offset + size] if size else seg_data[seg_offset : seg_offset + 4]
+    )
+    hex_digest = hashlib.sha256(data).hexdigest()
+
+    hash_name = None
+    for name, script in GLOBAL_SCRIPT_SIGNATURES.items():
+        if script[1] == hex_digest:
+            hash_name = name
+            break
+
+    if symbol is not None and hash_name is not None and symbol != hash_name:
+        raise Exception(f"Symbol {symbol} does not match hash {hash_name}")
+    return symbol, hash_name
 
 
 def process_global_candidates(txt_override=None):
@@ -559,20 +608,12 @@ def process_global_candidates(txt_override=None):
         for sig in signature_table:
             if _match_pattern(tokens, sig["pattern"]):
                 matched = True
-                hint = sig["name_hint"]
                 break
 
         if matched:
             try:
                 name = parse_level_script(0, segmented_addr=segmented_addr, label=None)
                 accepted.append((segmented_addr, name))
-                if ctx.txt:
-                    ctx.txt.write(
-                        ctx,
-                        "script_func",
-                        f"script_func_global_0x{seg_phys:x}",
-                        f"// detected as {hint}\n",
-                    )
             except Exception as e:
                 debug_print(f"Failed to process candidate 0x{segmented_addr:x}: {e}")
 

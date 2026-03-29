@@ -10,32 +10,37 @@ from .gbi0_dkr import GBI0DKR
 # This logic mirrors n64js/src/hle/microcodes.js inferUcodeFromString
 
 
+_microcode_cache = {}
+
+
 def version_str_to_microcode_class(version_str):
+    if version_str in _microcode_cache:
+        return _microcode_cache[version_str]
+
     if version_str is None:
-        return GBI0()
-
-    # Handle explicit names from extract.py
-    if version_str == "F3DEX2":
-        return GBI2()
-    if version_str == "F3DEX_GBI0_VTX":
-        return F3DEX_GBI0()
-    if version_str == "F3D":
-        return GBI0()
-    if version_str == "F3DEX":
-        return GBI1()
-    if version_str == "Diddy Kong Racing":
-        return GBI0DKR()
-
-    # Heuristic detection based on n64js logic
-    if "Diddy Kong Racing" in version_str:
-        return GBI0DKR()
-
-    if "F3" in version_str or "L3" in version_str:
+        res = GBI0()
+    elif version_str == "F3DEX2":
+        res = GBI2()
+    elif version_str == "F3DEX_GBI0_VTX":
+        res = F3DEX_GBI0()
+    elif version_str == "F3D":
+        res = GBI0()
+    elif version_str == "F3DEX":
+        res = GBI1()
+    elif version_str == "Diddy Kong Racing":
+        res = GBI0DKR()
+    elif "Diddy Kong Racing" in version_str:
+        res = GBI0DKR()
+    elif "F3" in version_str or "L3" in version_str:
         if "fifo" in version_str or "xbux" in version_str:
-            return GBI2()
-        return GBI1()
+            res = GBI2()
+        else:
+            res = GBI1()
+    else:
+        res = GBI0()
 
-    return GBI0()
+    _microcode_cache[version_str] = res
+    return res
 
 
 def create_microcode(version_str=None):

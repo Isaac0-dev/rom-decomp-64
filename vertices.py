@@ -11,6 +11,7 @@ class VertexProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
         self.parsed_vertices: Dict[tuple, Tuple[str, int]] = {}
+        self.parsed_vertices_by_segment: Dict[int, list] = {}
 
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[VertexRecord]:
         count = kwargs.get("count", 0)
@@ -53,52 +54,57 @@ class VertexProcessor(BaseProcessor):
         segment_data = CustomBytesIO(data)
         segment_data.seek(offset)
 
-        output_lines = [f"const Vtx {name}[] = {{"]
-
         total_bytes = count * 16
         vtx_data_block = segment_data.read(total_bytes)
-
         actual_count = len(vtx_data_block) // 16
-
-        pos_data = []
-        if actual_count > 0:
-            valid_block = vtx_data_block[: actual_count * 16]
-
-            try:
-                for x, y, z, flag, u, v, r, g, b, a in struct.iter_unpack(">3hH2h4B", valid_block):
-                    pos_data.append((x, y, z))
-                    output_lines.append(
-                        "    {{{ %5d, %6d, %6d}, 0, { %5d, %6d}, {%2d, %2d, %2d, %2d}}},"
-                        % (x, y, z, u, v, r, g, b, a)
-                    )
-            except Exception as e:
-                debug_fail(f"Could not unpack vertex data at 0x{segmented_addr:08X}: {e}")
-                output_lines.append("    /* ERROR: Could not unpack vertex data */")
-
-        if len(vtx_data_block) < total_bytes:
-            output_lines.append("    /* TRUNCATED DATA */")
-
-        output_lines.append("};")
-        output_str = "\n".join(output_lines) + "\n\n"
 
         key = (segmented_addr, count, start, end, parent_dl)
         self.parsed_vertices[key] = (name, actual_count)
+
+        if start not in self.parsed_vertices_by_segment:
+            self.parsed_vertices_by_segment[start] = []
+        self.parsed_vertices_by_segment[start].append((key, (name, actual_count)))
 
         self.ctx.db.vertices[db_key] = VertexRecord(
             seg_addr=segmented_addr,
             name=name,
             count=actual_count,
-            pos_data=pos_data,
-            script_text=output_str,
+            vtx_data=vtx_data_block,
             location=self.ctx.level_area,
         )
 
         return self.ctx.db.vertices[db_key]
 
     def serialize(self, record: VertexRecord) -> str:
-        if self.ctx.txt and record.script_text:
-            self.ctx.txt.write(self.ctx, "vertex", record.name, record.script_text)
-        return record.script_text
+        if record.script_text:
+            output_str = record.script_text
+        elif not record.vtx_data:
+            return ""
+        else:
+            output_lines = [f"const Vtx {record.name}[] = {{"]
+            actual_count = len(record.vtx_data) // 16
+            valid_block = record.vtx_data[: actual_count * 16]
+
+            try:
+                for x, y, z, flag, u, v, r, g, b, a in struct.iter_unpack(">3hH2h4B", valid_block):
+                    output_lines.append(
+                        "    {{{ %5d, %6d, %6d}, 0, { %5d, %6d}, {%2d, %2d, %2d, %2d}}},"
+                        % (x, y, z, u, v, r, g, b, a)
+                    )
+            except Exception as e:
+                debug_fail(f"Could not unpack vertex data for {record.name}: {e}")
+                output_lines.append("    /* ERROR: Could not unpack vertex data */")
+
+            if len(record.vtx_data) < record.count * 16:
+                output_lines.append("    /* TRUNCATED DATA */")
+
+            output_lines.append("};")
+            output_str = "\n".join(output_lines) + "\n\n"
+            record.script_text = output_str
+
+        if self.ctx.txt and output_str:
+            self.ctx.txt.write(self.ctx, "vertex", record.name, output_str)
+        return output_str
 
 
 _vertex_processor = None
