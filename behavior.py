@@ -1,6 +1,6 @@
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple
-from address_map import get_address_map
+from address_map import get_address_map, get_physical_symbol, SymbolType
 from utils import (
     debug_print,
     segment_from_addr,
@@ -36,10 +36,20 @@ def resolve_call_native(vram_addr: int) -> Optional[str]:
         return _call_native_cache[vram_addr]
 
     # Priority 1: Map File (Most telling for non-relocated code)
-    map_sym = get_address_map().get_symbol(vram_addr)
-    if map_sym:
-        _call_native_cache[vram_addr] = map_sym
-        return map_sym
+    seg_num = segment_from_addr(vram_addr)
+    segment_info = where_is_segment_loaded(seg_num)
+    offset = offset_from_segment_addr(vram_addr)
+    if segment_info is not None:
+        seg_start, seg_end = segment_info
+        map_sym = get_physical_symbol(seg_start + offset, SymbolType.SYMBOL_TYPE_BHV)
+        if map_sym:
+            _call_native_cache[vram_addr] = map_sym
+            return map_sym
+    else:
+        map_sym = get_address_map().get_symbol(vram_addr)
+        if map_sym:
+            _call_native_cache[vram_addr] = map_sym
+            return map_sym
 
     rom_offset = -1
     vram_base = _CODE_VRAM_START
@@ -771,8 +781,8 @@ class BehaviorProcessor(BaseProcessor):
             debug_fail(f"Failed to find segment {seg_num} for behavior at 0x{segmented_addr:08x}")
             return None
 
-        start, end = segment_info
-        db_key = (segmented_addr, start)
+        seg_start, seg_end = segment_info
+        db_key = (segmented_addr, seg_start)
 
         # Check database for already assigned name
         if self.ctx.db and db_key in self.ctx.db.behaviors:
@@ -821,8 +831,10 @@ class BehaviorProcessor(BaseProcessor):
         # Final identification happens in a refinement pass (py/db_passes.py).
         name = f"bhv_unknown_{segmented_addr:08X}"
 
+        phys_addr = seg_start + offset_from_segment_addr(segmented_addr)
+
         # Map Evidence (Hint Only)
-        map_sym = get_address_map().get_symbol(segmented_addr)
+        map_sym = get_physical_symbol(phys_addr, SymbolType.SYMBOL_TYPE_BHV)
         map_conf = 0.0
         if map_sym:
             map_conf = 0.5  # Baseline for map hint

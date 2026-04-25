@@ -244,6 +244,16 @@ class ObjectCorrelationPass(DatabaseAnalysisPass):
         # Phase 3: Mark vanilla status on behaviours
         self._mark_vanilla_behaviors(db)
 
+        # Comment out object commands with unknown behaviors
+        for level_key, level_script in db.level_scripts.items():
+            for cmd in level_script.commands:
+                if cmd.name != "OBJECT" and cmd.name != "OBJECT_WITH_ACTS":
+                    continue
+
+                beh_rec = cmd.params[8]
+                if beh_rec.beh_name.startswith("bhv_unknown"):
+                    cmd.comment = "// "
+
         debug_print("[ObjectCorrelationPass] Done.")
 
     # ----- Phase 1: Behaviour confidence from hash and map matching -----
