@@ -96,7 +96,6 @@ class GBI2(GBI1):
                     "vtx_name": vertices_name,
                     "count": count,
                     "v0": v0,
-                    "address": address,
                 },
             )
 

@@ -142,13 +142,13 @@ class DisplayListProcessor(BaseProcessor):
         sTxt = kwargs.get("txt")
         context_prefix = kwargs.get("context_prefix")
         if not segmented_addr:
-            debug_print(f"Failed to load a null display list {segmented_addr}")
+            debug_print(f"Failed to load a null display list 0x{segmented_addr:08X}")
             return None
 
         seg_num = segment_from_addr(segmented_addr)
         segment_info = where_is_segment_loaded(seg_num)
         if segment_info is None:
-            debug_print(f"Failed to get segment info for address {segmented_addr}")
+            debug_print(f"Failed to get segment info for address 0x{segmented_addr:08X}")
             return None
 
         start, end = segment_info
@@ -162,8 +162,14 @@ class DisplayListProcessor(BaseProcessor):
 
         offset = offset_from_segment_addr(segmented_addr)
         data = get_segment(seg_num)
-        if data is None or offset >= len(data):
-            debug_print(f"Failed to get segment data for address {segmented_addr}")
+        if data is None:
+            debug_print(f"Failed to get segment data for address 0x{segmented_addr:08X}")
+            return None
+
+        if offset >= len(data):
+            debug_print(
+                f"Segment data is too small for the given offset for address 0x{segmented_addr:08X}"
+            )
             return None
 
         # Assign name

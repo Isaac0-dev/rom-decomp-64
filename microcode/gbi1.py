@@ -216,7 +216,6 @@ class GBI1(Microcode):
                     "vtx_name": vertices_record,
                     "count": n,
                     "v0": v0,
-                    "address": address,
                 },
             )
 
