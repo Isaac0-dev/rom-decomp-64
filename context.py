@@ -13,18 +13,10 @@ class TweakValue(int):
         return self != self._default
 
 
-class LevelValues:
-    # This makes it easy to add level-based tweaks that automatically
-    # appear in tweaks.lua if their values differ from the default.
-    TWEAKS = {
-        "lowest_vtx_height": (-11000, "floorLowerLimit"),
-        "highest_vtx_height": (20000, "cellHeightLimit"),
-        "entry_level": (
-            level_const_name_to_int["LEVEL_CASTLE_GROUNDS"],
-            "entryLevel",
-            lambda v: level_num_to_const_name.get(v, f"LEVEL_UNKNOWN_{v}"),
-        ),
-    }
+class TweakableValues:
+    # Subclasses define TWEAKS and LUA_TABLE_NAME
+    TWEAKS: Dict[str, tuple] = {}
+    LUA_TABLE_NAME: str = ""
 
     def __init__(self):
         for py_name, tweak_info in self.TWEAKS.items():
@@ -56,8 +48,34 @@ class LevelValues:
                     out_val = converter(int(current_val))
                 else:
                     out_val = current_val
-                lines.append(f"gLevelValues.{lua_name} = {out_val}\n")
+                lines.append(f"{self.LUA_TABLE_NAME}.{lua_name} = {out_val}\n")
         return lines
+
+
+class LevelValues(TweakableValues):
+    # This makes it easy to add level-based tweaks that automatically
+    # appear in tweaks.lua if their values differ from the default.
+    LUA_TABLE_NAME = "gLevelValues"
+    TWEAKS = {
+        "lowest_vtx_height": (-11000, "floorLowerLimit"),
+        "highest_vtx_height": (20000, "cellHeightLimit"),
+        "entry_level": (
+            level_const_name_to_int["LEVEL_CASTLE_GROUNDS"],
+            "entryLevel",
+            lambda v: level_num_to_const_name.get(v, f"LEVEL_UNKNOWN_{v}"),
+        ),
+    }
+
+
+class BehaviorValues(TweakableValues):
+    LUA_TABLE_NAME = "gBehaviorValues"
+    TWEAKS = {
+        "toad_star_1_requirement": (12, "ToadStar1Requirement"),
+        "toad_star_2_requirement": (25, "ToadStar2Requirement"),
+        "toad_star_3_requirement": (35, "ToadStar3Requirement"),
+        "mips_star_1_requirement": (15, "MipsStar1Requirement"),
+        "mips_star_2_requirement": (50, "MipsStar2Requirement"),
+    }
 
 
 @dataclass
@@ -75,6 +93,7 @@ class ExtractionContext:
     current_context_prefix: Optional[str] = None
 
     level_values: LevelValues = field(default_factory=LevelValues)
+    behavior_values: BehaviorValues = field(default_factory=BehaviorValues)
 
     first_command_in_script: bool = True
     first_cmd: Optional[int] = None
