@@ -975,9 +975,8 @@ class ExtractionPipeline:
             mop_c_chunks = []
             mop_actor_folders = set()
 
-            for object in ctx.found_mops:
-                if object in MOP_BEHAVIORS:
-                    mop_data = MOP_BEHAVIORS[object]
+            for name, mop_data in MOP_BEHAVIORS.items():
+                if name in ctx.found_mops:
                     mop_lua_chunks.append(f"-- {mop_data.name}\n{mop_data.lua_code}\n")
                     mop_c_chunks.append(f"// {mop_data.name}\n{mop_data.behavior_code}\n")
                     if mop_data.model_folders:
@@ -987,7 +986,7 @@ class ExtractionPipeline:
             ctx.txt.create_file("data/behavior_data.c", content="\n".join(mop_c_chunks))
 
             if mop_actor_folders:
-                ctx.txt.copy_mop_actors(list(mop_actor_folders))
+                ctx.txt.copy_mop_actors(sorted(mop_actor_folders))
 
         # 10. Write all accumulated content to disk
         for path, contents in filepath_to_content.items():
