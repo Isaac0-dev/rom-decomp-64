@@ -151,6 +151,20 @@ class LightProcessor(BaseProcessor):
                     dir_ = struct.unpack(">3b", block[8:11])
                     # pad3 = block[11]
 
+                    # Detect Toad's Tool 64 overlapping light bug.
+                    # Some old level editors incorrectly load lights by using two 16-byte G_MV_LIGHT
+                    # commands with only an 8-byte offset between them. This causes the second light's color
+                    # to be loaded from the first light's directional vector.
+                    if col == colc and tuple(col) == dir_ and col in (b'\x00\x00\x00', b'\x01\x01\x01'):
+                        if offset >= 8:
+                            prev_segment_data = CustomBytesIO(data)
+                            prev_segment_data.seek(offset - 8)
+                            prev_block = prev_segment_data.read(8)
+                            if len(prev_block) == 8:
+                                true_ambient = prev_block[4:7]
+                                col = true_ambient
+                                colc = true_ambient
+
                     output_lines.append(
                         f"    {{ {col[0]}, {col[1]}, {col[2]} }}, 0, {{ {colc[0]}, {colc[1]}, {colc[2]} }}, 0, {{ {dir_[0]}, {dir_[1]}, {dir_[2]} }}, 0"
                     )
