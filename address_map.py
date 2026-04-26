@@ -1,6 +1,6 @@
 import re
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Union
 from enum import Enum
 
 
@@ -51,6 +51,7 @@ class AddressMap:
         self.symbol_to_addr: Dict[str, int] = {}
         self.symbol_to_rom: Dict[str, int] = {}
         self.rom_to_symbol: Dict[int, List[str]] = {}
+        self.segments: List[Tuple[int, int, int]] = []  # List of (vma_start, vma_end, lma_start)
 
         if map_path and os.path.exists(map_path):
             self._parse_map()
@@ -94,6 +95,8 @@ class AddressMap:
                     curr_segment = seg_m.group(1)
                     curr_vma = int(seg_m.group(2), 16) & 0xFFFFFFFF
                     curr_lma = int(seg_m.group(4), 16) & 0xFFFFFFFF
+                    size = int(seg_m.group(3), 16)
+                    self.segments.append((curr_vma, curr_vma + size, curr_lma))
                     pending_segment = None
                     continue
 
@@ -109,6 +112,8 @@ class AddressMap:
                     curr_segment = pending_segment
                     curr_vma = int(info_m.group(1), 16) & 0xFFFFFFFF
                     curr_lma = int(info_m.group(3), 16) & 0xFFFFFFFF
+                    size = int(info_m.group(2), 16)
+                    self.segments.append((curr_vma, curr_vma + size, curr_lma))
                     pending_segment = None
                     continue
 
@@ -152,13 +157,17 @@ class AddressMap:
         addr &= 0xFFFFFFFF
         return self.addr_to_symbol.get(addr, [])
 
-    def get_address(self, symbol: str) -> Optional[int]:
-        """Returns the address for the given symbol."""
-        return self.symbol_to_addr.get(symbol)
+    def get_rom_address(self, symbol_or_addr: Union[str, int]) -> Optional[int]:
+        """Returns the ROM address (load address) for a given symbol or VRAM address."""
+        if isinstance(symbol_or_addr, str):
+            return self.symbol_to_rom.get(symbol_or_addr)
 
-    def get_rom_address(self, symbol: str) -> Optional[int]:
-        """Returns the ROM address (load address) for the given symbol."""
-        return self.symbol_to_rom.get(symbol)
+        # Handle VRAM address lookup
+        addr = symbol_or_addr & 0xFFFFFFFF
+        for v_start, v_end, l_start in self.segments:
+            if v_start <= addr < v_end:
+                return l_start + (addr - v_start)
+        return None
 
     def get_symbols_at_rom(self, rom_addr: int) -> List[str]:
         """Returns symbols found at the given ROM address."""

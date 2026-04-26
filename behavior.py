@@ -36,17 +36,9 @@ def resolve_call_native(vram_addr: int) -> Optional[str]:
         return _call_native_cache[vram_addr]
 
     # Priority 1: Map File (Most telling for non-relocated code)
-    seg_num = segment_from_addr(vram_addr)
-    segment_info = where_is_segment_loaded(seg_num)
-    offset = offset_from_segment_addr(vram_addr)
-    if segment_info is not None:
-        seg_start, seg_end = segment_info
-        map_sym = get_physical_symbol(seg_start + offset, SymbolType.SYMBOL_TYPE_BHV)
-        if map_sym:
-            _call_native_cache[vram_addr] = map_sym
-            return map_sym
-    else:
-        map_sym = get_address_map().get_symbol(vram_addr)
+    map_addr = get_address_map().get_rom_address(vram_addr)
+    if map_addr is not None:
+        map_sym = get_physical_symbol(map_addr, SymbolType.SYMBOL_TYPE_BHV_FUNC)
         if map_sym:
             _call_native_cache[vram_addr] = map_sym
             return map_sym

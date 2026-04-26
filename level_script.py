@@ -437,7 +437,6 @@ def init_level_script_parsing(rom, txt):
     # set_segment_base_addr(0, (void *) 0x80000000);
     if where_is_segment_loaded(0) is None:
         load_segment(0x00, 0, len(rom), False)
-        load_segment(0x80, 0, len(rom), False)
 
     # Load the main (entry) segment as segment 16
     # This is similar to setup_game_memory in game_init.c (sm64 decomp)
