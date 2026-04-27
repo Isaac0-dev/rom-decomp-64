@@ -272,25 +272,28 @@ def is_cmd_terminator(cmd):
     return cmd in {"EXIT", "RETURN", "EXIT_AND_EXECUTE", "JUMP"}
 
 
-def quick_level_script_parse(rom):
+def quick_level_script_parse(rom, max_cmds=5000):
     prev_offset = rom.tell()
     cmds = []
     total_script_size = 0
-    while True:
+    cmds_count = 0
+    while cmds_count < max_cmds:
         header = read_int(rom)
-        if not header:
+        if header is None or header == 0:
             break
         from level_commands import parse_command_table, CMD_BBH
 
         command, size, _ = CMD_BBH([header])
-        if command >= len(parse_command_table):
-            return 1
+        if command >= len(parse_command_table) or size < 4:
+            break
         name = parse_command_table[command]["name"]
         cmds.append(name)
         if is_cmd_terminator(name):
+            total_script_size += int(size)
             break
         rom.seek(int(size) - 4, 1)
         total_script_size += int(size)
+        cmds_count += 1
     rom.seek(prev_offset, 0)
     return cmds, total_script_size
 
