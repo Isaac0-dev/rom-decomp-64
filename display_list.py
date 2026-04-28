@@ -31,6 +31,7 @@ class Disassembler:
         self.sTxt = sTxt
         self.context_prefix = context_prefix
         self.commands: List[CommandIR] = []
+        self.side_effects: List[Dict[str, Any]] = []
         self.end_dl = False
         self.branch_taken = False
         self.current_pos = 0
@@ -126,7 +127,7 @@ def parse_display_list_from_data(
                 or (hasattr(handler, "__name__") and handler.__name__ == "execute_unknown")
             ):
                 break
-        return dis.commands, current_microcode.__class__.__name__
+        return dis.commands, dis.side_effects, current_microcode.__class__.__name__
     finally:
         current_microcode = old
 
@@ -158,7 +159,9 @@ class DisplayListProcessor(BaseProcessor):
 
         # Check database for already assigned name for this exact address + segment load
         if self.ctx.db and db_key in self.ctx.db.display_lists:
-            return self.ctx.db.display_lists[db_key]
+            record = self.ctx.db.display_lists[db_key]
+            self.re_simulate_side_effects(record, sTxt)
+            return record
 
         offset = offset_from_segment_addr(segmented_addr)
         data = get_segment(seg_num)
@@ -178,7 +181,7 @@ class DisplayListProcessor(BaseProcessor):
             dl_name = f"{context_prefix}_{dl_name}"
 
         forced = probe_microcode(data, offset)
-        commands, ucode_name = parse_display_list_from_data(
+        commands, side_effects, ucode_name = parse_display_list_from_data(
             CustomBytesIO(data),
             offset,
             segmented_addr,
@@ -191,6 +194,7 @@ class DisplayListProcessor(BaseProcessor):
             seg_addr=segmented_addr,
             name=dl_name,
             commands=commands,
+            side_effects=side_effects,
             microcode=ucode_name,
             location=self.ctx.level_area,
         )
@@ -213,6 +217,57 @@ class DisplayListProcessor(BaseProcessor):
         if self.ctx.txt and output_str:
             self.ctx.txt.write(self.ctx, "dl", record.name, output_str)
         return output_str
+
+    def re_simulate_side_effects(self, record: DisplayListRecord, sTxt: Any) -> None:
+        """Re-runs side effects for a cached display list."""
+        from texture import (
+            load_block,
+            load_tile,
+            load_tlut,
+            set_texture_image,
+            set_tile_format,
+            set_tile_size,
+        )
+
+        for effect in record.side_effects:
+            etype = effect.get("type")
+            if etype == "set_texture_image":
+                set_texture_image(
+                    effect["addr"],
+                    effect["fmt"],
+                    effect["siz"],
+                    effect["width"],
+                    effect["context_prefix"],
+                )
+            elif etype == "set_tile":
+                set_tile_format(effect["tile"], effect["fmt"], effect["siz"], effect.get("tmem", 0))
+            elif etype == "load_block":
+                load_block(
+                    sTxt,
+                    effect["pos"],
+                    effect["tile"],
+                    effect["uls"],
+                    effect["ult"],
+                    effect["lrs"],
+                    effect["dxt"],
+                    None,
+                )
+            elif etype == "load_tile":
+                load_tile(
+                    sTxt,
+                    effect["pos"],
+                    effect["tile"],
+                    effect["uls"],
+                    effect["ult"],
+                    effect["lrs"],
+                    effect["lrt"],
+                )
+            elif etype == "set_tile_size":
+                set_tile_size(
+                    effect["tile"], effect["uls"], effect["ult"], effect["lrs"], effect["lrt"]
+                )
+            elif etype == "load_tlut":
+                load_tlut(sTxt, effect["count"], 0, None)
 
 
 _dl_processor = None

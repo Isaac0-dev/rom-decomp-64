@@ -121,6 +121,16 @@ class Microcode(ABC):
         siz = G_IM_SIZ_MAP.get(siz_val, str(siz_val))
 
         if dis:
+            dis.side_effects.append(
+                {
+                    "type": "set_texture_image",
+                    "addr": texture_addr,
+                    "fmt": fmt_val,
+                    "siz": siz_val,
+                    "width": width,
+                    "context_prefix": dis.context_prefix,
+                }
+            )
             texture_record = set_texture_image(
                 texture_addr, fmt_val, siz_val, width, dis.context_prefix
             )
@@ -166,7 +176,16 @@ class Microcode(ABC):
         cms = get_flags(cms_val)
 
         if dis:
-            set_tile_format(tile_val, fmt_val, siz_val)
+            dis.side_effects.append(
+                {
+                    "type": "set_tile",
+                    "tile": tile_val,
+                    "fmt": fmt_val,
+                    "siz": siz_val,
+                    "tmem": tmem,
+                }
+            )
+            set_tile_format(tile_val, fmt_val, siz_val, tmem)
             dis.set_cmd(
                 "gsDPSetTile",
                 {
@@ -195,6 +214,17 @@ class Microcode(ABC):
         tile = G_TX_MAP.get(tile_val, str(tile_val))
 
         if dis:
+            dis.side_effects.append(
+                {
+                    "type": "load_block",
+                    "pos": dis.current_pos,
+                    "tile": tile_val,
+                    "uls": uls,
+                    "ult": ult,
+                    "lrs": lrs,
+                    "dxt": dxt,
+                }
+            )
             load_block(dis.sTxt, dis.current_pos, tile_val, uls, ult, lrs, dxt, None)
             dis.set_cmd(
                 "gsDPLoadBlock",
@@ -300,6 +330,16 @@ class Microcode(ABC):
         lrt = self._SHIFTR(cmd1, 0, 12)
         tile_name = G_TX_MAP.get(tile, str(tile))
         if dis:
+            dis.side_effects.append(
+                {
+                    "type": "set_tile_size",
+                    "tile": tile,
+                    "uls": uls,
+                    "ult": ult,
+                    "lrs": lrs,
+                    "lrt": lrt,
+                }
+            )
             set_tile_size(tile, uls, ult, lrs, lrt)
             dis.set_cmd(
                 "gsDPSetTileSize",
@@ -314,6 +354,17 @@ class Microcode(ABC):
         lrt = self._SHIFTR(cmd1, 0, 12)
         tile_name = G_TX_MAP.get(tile_val, str(tile_val))
         if dis:
+            dis.side_effects.append(
+                {
+                    "type": "load_tile",
+                    "pos": dis.current_pos,
+                    "tile": tile_val,
+                    "uls": uls,
+                    "ult": ult,
+                    "lrs": lrs,
+                    "lrt": lrt,
+                }
+            )
             load_tile(dis.sTxt, dis.current_pos, tile_val, uls, ult, lrs, lrt)
             dis.set_cmd(
                 "gsDPLoadTile",
@@ -326,6 +377,12 @@ class Microcode(ABC):
         tile_name = G_TX_MAP.get(tile_val, str(tile_val))
         if dis:
             real_count = count + 1
+            dis.side_effects.append(
+                {
+                    "type": "load_tlut",
+                    "count": real_count,
+                }
+            )
             load_tlut(dis.sTxt, real_count, 0, None)
             dis.set_cmd("gsDPLoadTLUTCmd", {"tile": tile_name, "count": count})
 

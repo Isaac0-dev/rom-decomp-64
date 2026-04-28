@@ -198,6 +198,7 @@ class TextureRecord:
     name: str = ""
     context_prefix: Optional[str] = None
     output_path: str = ""
+    is_palette: bool = False
     # Raw pixel bytes captured at discovery time; serializer converts to PNG
     segment_data: bytes = b""
     # Raw palette bytes (CI textures only)
@@ -370,6 +371,7 @@ class DisplayListRecord:
     is_vanilla: Optional[bool] = None
 
     location: LevelAreaContext = field(default_factory=LevelAreaContext)
+    side_effects: List[Dict[str, Any]] = field(default_factory=list)
 
     def __str__(self):
         return self.name

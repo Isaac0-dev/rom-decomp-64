@@ -9,6 +9,7 @@ from utils import (
     segment_from_addr,
 )
 from segment import get_segment, segmented_to_virtual, wait_for_segment_load
+from gbi_defines import G_TX_RENDERTILE, G_TX_LOADTILE
 import os
 import math
 import binary_to_png
@@ -41,8 +42,9 @@ class ImageSize(IntEnum):
 class TextureInfo:
     addr: int = 0
     fmt: int = ImageFormat.RGBA
-    tile_fmt: Optional[int] = None
     siz: int = ImageSize.B16
+    tile_fmt: Optional[int] = None
+    tile_siz: Optional[int] = None
     width: int = 0
     height: int = 0
     context_prefix: Optional[str] = None
@@ -67,6 +69,7 @@ class TextureMeta:
 # It's not reset at the end of processing to allow other display lists
 # to reuse the current texture info (like switches in the geo layout)
 current_texture_info = TextureInfo()
+current_palette: Optional[Union[bytearray, bytes, List[int]]] = None
 
 texture_table: Dict[str, TextureMeta] = {}
 
@@ -77,9 +80,6 @@ def get_current_skybox() -> Optional[str]:
     skybox = ctx.db.skyboxes[ctx.curr_level]
     skybox.is_used = True
     return skybox.skybox_name
-
-
-current_palette: Optional[Union[bytearray, bytes, List[int]]] = None
 
 
 def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureInfo]) -> None:
@@ -114,7 +114,15 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
         return
 
     current_palette = segment_data[offset : offset + size]
-    # debug_print(f"TLUT loaded successfully from 0x{addr:08X}, {count} colors")
+    # Mark the record as a palette so we don't try to write it as an image
+    phys = segmented_to_virtual(addr)
+    name = f"texture_{addr:08X}_{phys:08X}_seg{seg_num}"
+    if tex_info.context_prefix:
+        name = f"{tex_info.context_prefix}_{name}"
+
+    if name in ctx.db.textures:
+        ctx.db.textures[name].is_palette = True
+        ctx.db.textures[name].palette_data = current_palette
 
 
 image_handlers: Dict[int, Callable[..., None]] = {
@@ -188,9 +196,16 @@ def _write_png_worker(
                     _skipped_textures.add(name)
                 return
 
+        if w <= 0 or h <= 0:
+            debug_print(f"Skipping texture {name}: invalid dimensions {w}x{h}")
+            return
+
         tex_data = data_source[offset : offset + required_bytes]
         buffer = BytesIO()
-        if palette is not None:
+        if fmt == ImageFormat.CI:
+            if palette is None:
+                debug_print(f"Skipping CI texture {name}: no palette provided")
+                return
             image_handlers[fmt](w, h, bpp, palette, tex_data, buffer)
         else:
             image_handlers[fmt](w, h, bpp, tex_data, buffer)
@@ -219,29 +234,40 @@ def write_texture(
         )
         return
 
-    if ctx.db is not None and name in ctx.db.textures:
-        rec = ctx.db.textures[name]
-        # Snapshot the raw bytes now while the segment is loaded
-        required_bytes = (w * h * bpp + 7) // 8
-        available = len(segment_data) - offset
-        if offset < len(segment_data) and available >= required_bytes:
-            rec.segment_data = bytes(segment_data[offset : offset + required_bytes])
-        else:
-            # Try alternate segment cache
-            for key, cached in segment._segment_cache.items():
-                if len(key) < 2 or key[1] != seg_num:
-                    continue
-                data = cached.get("data")
-                if not data:
-                    continue
-                if offset < len(data) and len(data) - offset >= required_bytes:
-                    rec.segment_data = bytes(data[offset : offset + required_bytes])
-                    break
-        if palette is not None:
-            rec.palette_data = bytes(palette)
+    if name not in ctx.db.textures:
+        debug_print("Failed writing texture, name not in texture database.")
+        return
+
+    rec = ctx.db.textures[name]
+    # Snapshot the raw bytes now while the segment is loaded
+    required_bytes = (w * h * bpp + 7) // 8
+    available = len(segment_data) - offset
+    if offset < len(segment_data) and available >= required_bytes:
+        rec.segment_data = bytes(segment_data[offset : offset + required_bytes])
+    else:
+        # Try alternate segment cache
+        for key, cached in segment._segment_cache.items():
+            if len(key) < 2 or key[1] != seg_num:
+                continue
+            data = cached.get("data")
+            if not data:
+                continue
+            if offset < len(data) and len(data) - offset >= required_bytes:
+                rec.segment_data = bytes(data[offset : offset + required_bytes])
+                break
+    if palette is not None:
+        rec.palette_data = bytes(palette)
+
+    if rec.segment_data is None:
+        debug_print(
+            f"write_texture failed to snapshot {name} (seg {seg_num}, offset 0x{offset:X}, "
+            f"needs {required_bytes} bytes, available {available})"
+        )
 
 
 def set_tile_size(tile: int, uls: int, ult: int, lrs: int, lrt: int) -> None:
+    global current_texture_info
+
     # Calculate width and height from tile size
     # Coordinates are 10.2 fixed point (shifted by 2)
     w = ((lrs - uls) >> 2) + 1
@@ -251,19 +277,19 @@ def set_tile_size(tile: int, uls: int, ult: int, lrs: int, lrt: int) -> None:
     current_texture_info.height = h
 
 
-def set_tile_format(tile: int, fmt: int, siz: Optional[int]) -> None:
+def set_tile_format(tile: int, fmt: int, siz: Optional[int], tmem: int) -> None:
     global current_texture_info
 
-    # Skip TX_LOADTILE (0x7)
-    if tile == 0x7:
+    # Only use the load tile slot (slot 7)
+    if tile != G_TX_LOADTILE:
         return
 
-    # Only process TX_RENDERTILE (0x0)
-    if tile == 0x0:
-        current_texture_info.tile_fmt = fmt
-        # Also update siz if provided
-        if siz is not None:
-            current_texture_info.siz = siz
+    if current_texture_info.tile_fmt is not None and current_texture_info.tile_fmt != fmt:
+        debug_print(f"Conflicting tile_fmt: {current_texture_info.tile_fmt} != {fmt}")
+        return
+
+    current_texture_info.tile_fmt = fmt
+    current_texture_info.tile_siz = siz
 
 
 def set_texture_image(
@@ -274,10 +300,13 @@ def set_texture_image(
     current_texture_info.addr = segmented_addr
     current_texture_info.fmt = fmt  # Fallback only
     current_texture_info.siz = siz
-    if current_texture_info.width == 0:
-        current_texture_info.width = width
+    current_texture_info.width = width
+    current_texture_info.height = 0
     current_texture_info.context_prefix = context_prefix
-    # Don't reset tile_fmt here - it's set by G_SETTILE
+
+    # Reset tile-specific overrides from previous textures
+    current_texture_info.tile_fmt = None
+    current_texture_info.tile_siz = None
 
     phys = segmented_to_virtual(segmented_addr)
     seg_num = segment_from_addr(segmented_addr)
@@ -321,9 +350,9 @@ def load_block(
         tex_info = current_texture_info
 
     addr = tex_info.addr
-    # Use tile_fmt if set (from G_SETTILE), otherwise fallback to fmt (from G_SETTIMG)
+    # Use tile_fmt/siz if set, otherwise fallback to fmt/siz
     fmt = tex_info.tile_fmt if tex_info.tile_fmt is not None else tex_info.fmt
-    siz = tex_info.siz
+    siz = tex_info.tile_siz if tex_info.tile_siz is not None else tex_info.siz
     width = tex_info.width
     context_prefix = tex_info.context_prefix
 
@@ -378,22 +407,20 @@ def load_block(
         dl_pos=pos,
     )
 
-    if ctx.db is not None:
-        from rom_database import TextureRecord
+    from rom_database import TextureRecord
 
-        ctx.db.textures[name] = TextureRecord(
-            addr=addr,
-            phys=phys,
-            seg_num=seg_num,
-            offset=offset,
-            fmt=fmt,
-            siz=siz,
-            width=w,
-            height=h,
-            name=name,
-        )
-        ctx.db.set_symbol(addr, name, "Texture")
-
+    ctx.db.textures[name] = TextureRecord(
+        addr=addr,
+        phys=phys,
+        seg_num=seg_num,
+        offset=offset,
+        fmt=fmt,
+        siz=siz,
+        width=w,
+        height=h,
+        name=name,
+    )
+    ctx.db.set_symbol(addr, name, "Texture")
     write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
 
 
@@ -407,7 +434,11 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
         if current_texture_info.tile_fmt is not None
         else current_texture_info.fmt
     )
-    siz = current_texture_info.siz
+    siz = (
+        current_texture_info.tile_siz
+        if current_texture_info.tile_siz is not None
+        else current_texture_info.siz
+    )
     context_prefix = current_texture_info.context_prefix
 
     if addr == 0:
@@ -448,21 +479,20 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
         dl_pos=pos,
     )
 
-    if ctx.db is not None:
-        from rom_database import TextureRecord
+    from rom_database import TextureRecord
 
-        ctx.db.textures[name] = TextureRecord(
-            addr=addr,
-            phys=phys,
-            seg_num=seg_num,
-            offset=offset,
-            fmt=fmt,
-            siz=siz,
-            width=w,
-            height=h,
-            name=name,
-        )
-        ctx.db.set_symbol(addr, name, "Texture")
+    ctx.db.textures[name] = TextureRecord(
+        addr=addr,
+        phys=phys,
+        seg_num=seg_num,
+        offset=offset,
+        fmt=fmt,
+        siz=siz,
+        width=w,
+        height=h,
+        name=name,
+    )
+    ctx.db.set_symbol(addr, name, "Texture")
 
     write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
 
@@ -637,6 +667,11 @@ class TextureProcessor(BaseProcessor):
     serialize() is the main entry point called from pass_serialize.
     """
 
+    def __init__(self, context):
+        super().__init__(context)
+        self.submitted_count = 0
+        self.skipped_count = 0
+
     def parse(self, segmented_addr: int, **kwargs: Any) -> str:
         # Discovery is handled by load_block / load_tile; nothing extra to do.
         return ""
@@ -672,8 +707,18 @@ class TextureProcessor(BaseProcessor):
                 break
 
         # PNG is written asynchronously
+        if record.is_palette:
+            pal_str = ""
+            if record.palette_data:
+                pal_str = ", ".join(f"0x{b:02X}" for b in record.palette_data)
+            u8_palette = f"ALIGNED8 const u8 {name}[] = {{\n    {pal_str}\n}};\n\n"
+            if self.txt:
+                self.txt.write(ctx, "texture_dl", name.replace("texture", "dl"), u8_palette)
+            return u8_palette
+
         if record.segment_data:
-            executor.submit(
+            self.submitted_count += 1
+            future = executor.submit(
                 _write_png_worker,
                 self.txt,
                 name,
@@ -686,6 +731,12 @@ class TextureProcessor(BaseProcessor):
                 record.segment_data,  # pre-sliced bytes
                 palette,
             )
+            if self.txt:
+                self.txt.register_future(future)
+        else:
+            self.skipped_count += 1
+            if not record.is_palette:
+                debug_print(f"Texture {name} has no segment_data, skipping PNG write.")
 
         u8_buffer = f'ALIGNED8 Texture {name} = {{\n#include "{path}{name}.inc.c"\n}};\n\n'
 
