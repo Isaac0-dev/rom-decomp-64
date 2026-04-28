@@ -97,9 +97,10 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
     # count is number of colors
     size = count * 2  # 2 bytes per color
 
-    segment = get_segment(segment_from_addr(addr))
+    seg_num = segment_from_addr(addr)
+    segment = get_segment(seg_num)
     if not segment:
-        debug_print(f"WARNING: Segment {segment_from_addr(addr)} not loaded for TLUT at 0x{addr:X}")
+        debug_print(f"WARNING: Segment {seg_num} not loaded for TLUT at 0x{addr:X}")
         wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
         return
 
@@ -169,7 +170,7 @@ def _write_png_worker(
             if alt_data is not None:
                 if name not in _skipped_textures:
                     debug_print(
-                        f"INFO: Using alternate segment {seg_num} data for {name} (len 0x{seg_len:X})"
+                        f"Using alternate segment {seg_num} data for {name} (len 0x{seg_len:X})"
                     )
                     _skipped_textures.add(name)
                 data_source = alt_data
@@ -178,11 +179,11 @@ def _write_png_worker(
                     reason = "offset" if offset >= seg_len else "size"
                     if reason == "offset":
                         debug_print(
-                            f"WARNING: Skipping texture {name}: offset 0x{offset:X} is beyond segment data (len 0x{seg_len:X})"
+                            f"Skipping texture {name}: offset 0x{offset:X} is beyond segment data (len 0x{seg_len:X})"
                         )
                     else:
                         debug_print(
-                            f"WARNING: Skipping texture {name}: needs 0x{required_bytes:X} bytes but only 0x{available:X} are available"
+                            f"Skipping texture {name}: needs 0x{required_bytes:X} bytes but only 0x{available:X} are available"
                         )
                     _skipped_textures.add(name)
                 return

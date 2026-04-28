@@ -326,7 +326,7 @@ class Microcode(ABC):
         if dis:
             real_count = count + 1
             load_tlut(dis.sTxt, real_count, 0, None)
-            dis.set_cmd("gsDPLoadTLUT", {"tile": tile_name, "count": count}, commented_out=True)
+            dis.set_cmd("gsDPLoadTLUTCmd", {"tile": tile_name, "count": count})
 
     def execute_dp_set_env_color(self, cmd0, cmd1, dis):
         r = self._SHIFTR(cmd1, 24, 8)
