@@ -155,7 +155,11 @@ class LightProcessor(BaseProcessor):
                     # Some old level editors incorrectly load lights by using two 16-byte G_MV_LIGHT
                     # commands with only an 8-byte offset between them. This causes the second light's color
                     # to be loaded from the first light's directional vector.
-                    if col == colc and tuple(col) == dir_ and col in (b'\x00\x00\x00', b'\x01\x01\x01'):
+                    if (
+                        col == colc
+                        and tuple(col) == dir_
+                        and col in (b"\x00\x00\x00", b"\x01\x01\x01")
+                    ):
                         if offset >= 8:
                             prev_segment_data = CustomBytesIO(data)
                             prev_segment_data.seek(offset - 8)

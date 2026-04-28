@@ -951,16 +951,26 @@ class ExtractionPipeline:
                 ctx.level_values.entry_level = int.from_bytes(self.rom[0x6D6A : 0x6D6A + 2], "big")
 
             if not ctx.behavior_values.toad_star_1_requirement.is_modified():
-                ctx.behavior_values.toad_star_1_requirement = int.from_bytes(self.rom[0x3199B : 0x3199B + 1], "big")
+                ctx.behavior_values.toad_star_1_requirement = int.from_bytes(
+                    self.rom[0x3199B : 0x3199B + 1], "big"
+                )
             if not ctx.behavior_values.toad_star_2_requirement.is_modified():
-                ctx.behavior_values.toad_star_2_requirement = int.from_bytes(self.rom[0x319CF : 0x319CF + 1], "big")
+                ctx.behavior_values.toad_star_2_requirement = int.from_bytes(
+                    self.rom[0x319CF : 0x319CF + 1], "big"
+                )
             if not ctx.behavior_values.toad_star_3_requirement.is_modified():
-                ctx.behavior_values.toad_star_3_requirement = int.from_bytes(self.rom[0x31A03 : 0x31A03 + 1], "big")
+                ctx.behavior_values.toad_star_3_requirement = int.from_bytes(
+                    self.rom[0x31A03 : 0x31A03 + 1], "big"
+                )
 
             if not ctx.behavior_values.mips_star_1_requirement.is_modified():
-                ctx.behavior_values.mips_star_1_requirement = int.from_bytes(self.rom[0xB34CB : 0xB34CB + 1], "big")
+                ctx.behavior_values.mips_star_1_requirement = int.from_bytes(
+                    self.rom[0xB34CB : 0xB34CB + 1], "big"
+                )
             if not ctx.behavior_values.mips_star_2_requirement.is_modified():
-                ctx.behavior_values.mips_star_2_requirement = int.from_bytes(self.rom[0xB3523 : 0xB3523 + 1], "big")
+                ctx.behavior_values.mips_star_2_requirement = int.from_bytes(
+                    self.rom[0xB3523 : 0xB3523 + 1], "big"
+                )
 
         tweaks = ctx.level_values.get_tweaks_lua()
         tweaks += ctx.behavior_values.get_tweaks_lua()

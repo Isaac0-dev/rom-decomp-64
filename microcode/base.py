@@ -279,8 +279,9 @@ class Microcode(ABC):
 
         if dis:
             dis.set_cmd(
-                "gsDPSetScissor", {"mode": mode, "ulx": ulx, "uly": uly, "lrx": lrx, "lry": lry},
-                commented_out=True
+                "gsDPSetScissor",
+                {"mode": mode, "ulx": ulx, "uly": uly, "lrx": lrx, "lry": lry},
+                commented_out=True,
             )
 
     def execute_dp_set_fog_color(self, cmd0, cmd1, dis):
@@ -425,8 +426,9 @@ class Microcode(ABC):
         wB = self._SHIFTR(cmd1, 0, 8)
         if dis:
             dis.set_cmd(
-                "gsDPSetKeyGB", {"cG": cG, "sG": sG, "wG": wG, "cB": cB, "sB": sB, "wB": wB},
-                commented_out=True
+                "gsDPSetKeyGB",
+                {"cG": cG, "sG": sG, "wG": wG, "cB": cB, "sB": sB, "wB": wB},
+                commented_out=True,
             )
 
     def execute_dp_set_key_r(self, cmd0, cmd1, dis):

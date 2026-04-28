@@ -171,7 +171,9 @@ def get_dl_name(addr: int, sTxt: Any, context_prefix: Optional[str]) -> Any:
         return "NULL"
     from display_list import get_display_list_processor
 
-    return get_display_list_processor().parse(addr, txt=sTxt, context_prefix=context_prefix) or "NULL"
+    return (
+        get_display_list_processor().parse(addr, txt=sTxt, context_prefix=context_prefix) or "NULL"
+    )
 
 
 # --- Command Sizing Functions ---
