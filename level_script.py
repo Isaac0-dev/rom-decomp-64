@@ -289,7 +289,6 @@ def quick_level_script_parse(rom, max_cmds=5000):
         name = parse_command_table[command]["name"]
         cmds.append(name)
         if is_cmd_terminator(name):
-            total_script_size += int(size)
             break
         rom.seek(int(size) - 4, 1)
         total_script_size += int(size)
