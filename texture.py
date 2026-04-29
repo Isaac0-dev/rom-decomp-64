@@ -409,17 +409,24 @@ def load_block(
 
     from rom_database import TextureRecord
 
-    ctx.db.textures[name] = TextureRecord(
-        addr=addr,
-        phys=phys,
-        seg_num=seg_num,
-        offset=offset,
-        fmt=fmt,
-        siz=siz,
-        width=w,
-        height=h,
-        name=name,
-    )
+    if name in ctx.db.textures:
+        rec = ctx.db.textures[name]
+        rec.width = w
+        rec.height = h
+        rec.fmt = fmt
+        rec.siz = siz
+    else:
+        ctx.db.textures[name] = TextureRecord(
+            addr=addr,
+            phys=phys,
+            seg_num=seg_num,
+            offset=offset,
+            fmt=fmt,
+            siz=siz,
+            width=w,
+            height=h,
+            name=name,
+        )
     ctx.db.set_symbol(addr, name, "Texture")
     write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
 
@@ -481,17 +488,24 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
 
     from rom_database import TextureRecord
 
-    ctx.db.textures[name] = TextureRecord(
-        addr=addr,
-        phys=phys,
-        seg_num=seg_num,
-        offset=offset,
-        fmt=fmt,
-        siz=siz,
-        width=w,
-        height=h,
-        name=name,
-    )
+    if name in ctx.db.textures:
+        rec = ctx.db.textures[name]
+        rec.width = w
+        rec.height = h
+        rec.fmt = fmt
+        rec.siz = siz
+    else:
+        ctx.db.textures[name] = TextureRecord(
+            addr=addr,
+            phys=phys,
+            seg_num=seg_num,
+            offset=offset,
+            fmt=fmt,
+            siz=siz,
+            width=w,
+            height=h,
+            name=name,
+        )
     ctx.db.set_symbol(addr, name, "Texture")
 
     write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
@@ -681,6 +695,7 @@ class TextureProcessor(BaseProcessor):
         from rom_database import TextureRecord as _TextureRecord
 
         if not isinstance(record, _TextureRecord):
+            debug_fail(f"Texture record is wrong type {type(record)}")
             return ""
 
         name = record.name
