@@ -101,6 +101,9 @@ class Microcode(ABC):
                     params_str += f"/* {k} */ {v}, "
                 elif isinstance(v, int):
                     params_str += f"/* {k} */ 0x{v:X}, "
+                elif v is None:
+                    debug_print(f"Null value for {k} in {cmd.name}")
+                    params_str += f"/* {k} */ NULL, "
                 else:
                     raise Exception(
                         f"While looking at {cmd.name} found unknown parameter type {type(v)} for {k} ... {v}"
