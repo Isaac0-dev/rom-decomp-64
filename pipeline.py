@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import queue
+import struct
 import threading
 from typing import List, Optional, Any, TYPE_CHECKING
 from context import ctx
@@ -167,6 +168,35 @@ class ExtractionPipeline:
                 if rom_data[0x1200000:0x1200008] == compare:
                     hack_type = name
                     break
+        extra_rom_type_info = ""
+        rom_type_confidence = "likely "
+
+        # Manual detection for SM64 Rom Manager
+        offset = 0x1201FF8  # This address has the version info
+        if len(rom_data) > offset + 8:
+            data = rom_data[offset:offset + 8]
+            dev_info = struct.unpack(">I", data[0:4])[0]
+            major, minor, build, revision = struct.unpack("BBBB", data[4:8])
+
+            # Development info
+            if dev_info != 0x1010101:
+                dev_stage = dev_info >> 24
+                dev_build = dev_info & 0xFFFFFF
+            else:
+                dev_stage = 3
+                dev_build = 0
+
+            version = f"v{major}.{minor}"
+            if build > 0:
+                version += f".{build}"
+            if revision > 0:
+                version += f".{revision}"
+
+            from constants import ROM_MANAGER_VERSIONS
+            if version in ROM_MANAGER_VERSIONS:
+                hack_type = "SM64 Rom Manager"
+                extra_rom_type_info = f" {version}"
+                rom_type_confidence = ""  # high confidence
 
         # Update db.meta
         self.db.meta.filename = filename
@@ -180,7 +210,7 @@ class ExtractionPipeline:
         )
 
         if hack_type != "":
-            print(f"ROM was likely built with {hack_type}.")
+            print(f"ROM was {rom_type_confidence}built with {hack_type}{extra_rom_type_info}.")
 
         self._prev_offset = self.rom.tell()
 
@@ -941,7 +971,7 @@ class ExtractionPipeline:
         ap = get_audio_processor()
         ap.serialize(self.db.audio)
 
-        if self.db.meta.hack_type == "SM64 Editor" or self.db.meta.hack_type == "Rom Manager":
+        if self.db.meta.hack_type == "SM64 Editor" or self.db.meta.hack_type == "SM64 Rom Manager":
             # If we didn't see any modification to the entry level, some hacks
             # put their entry level adjustment at 0x6D6A
             if (

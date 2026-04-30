@@ -155,7 +155,7 @@ def register_scroll_target(
     # Update the hack type if it's not set
     if ctx.db.meta.hack_type == "":
         if "RM_Scroll_Texture" in beh_name:
-            ctx.db.meta.hack_type = "Rom Manager"
+            ctx.db.meta.hack_type = "SM64 Rom Manager"
         elif "editor_Scroll_Texture" in beh_name:
             ctx.db.meta.hack_type = "SM64 Editor"
 

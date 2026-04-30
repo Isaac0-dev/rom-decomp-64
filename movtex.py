@@ -84,7 +84,7 @@ class MovtexExtractor:
         return (seg_num, start, end)
 
     def scan_segment(self, seg_num: int) -> List[MovtexCollection]:
-        if ctx.db.meta.hack_type == "SM64 Editor" or ctx.db.meta.hack_type == "Rom Manager":
+        if ctx.db.meta.hack_type == "SM64 Editor" or ctx.db.meta.hack_type == "SM64 Rom Manager":
             return []
 
         seg_key = self._segment_cache_key(seg_num)
@@ -721,7 +721,7 @@ class MovtexExtractor:
             found_standard_values = None
 
             # Try Rom Manager/SM64 Editor tables first
-            if ctx.db.meta.hack_type in ["SM64 Editor", "Rom Manager"]:
+            if ctx.db.meta.hack_type in ["SM64 Editor", "SM64 Rom Manager"]:
                 for box_type in range(3):
                     if ctx.db.meta.hack_type == "SM64 Editor":
                         table_addr = 0x19001800 + 0x50 * box_type
