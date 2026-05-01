@@ -199,15 +199,21 @@ class ExtractionPipeline:
                 rom_type_confidence = ""  # high confidence
 
         # Manual detection for Bowser's Blueprints
-        from constants import BBP_SIGNATURE
         offset = 0x3FFFFF8
-        if len(rom_data) > offset:
-            data = rom_data[offset:offset + 4]
+        if len(rom_data) >= offset + 8:
+            data = rom_data[offset:offset + 8]
 
             # Look for signature
-            if struct.unpack(">I", data)[0] == BBP_SIGNATURE:
+            from constants import BBP_SIGNATURE
+            if struct.unpack(">I", data[:4])[0] == BBP_SIGNATURE:
+                metadata_start = struct.unpack(">I", data[4:8])[0]  # ptr to version info
+                offset = metadata_start
+                major, minor, patch = struct.unpack(">HHH", rom_data[offset:offset + 6])
+
+                version = f"v{major}.{minor}.{patch}"
                 hack_type = "Bowser's Blueprints"
                 rom_type_confidence = ""  # high confidence
+                extra_rom_type_info = f" {version}"
 
         # Update db.meta
         self.db.meta.filename = filename
