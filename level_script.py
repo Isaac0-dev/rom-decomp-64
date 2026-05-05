@@ -373,48 +373,43 @@ def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
     prev_indent = ctx.indent
     ctx.curr_phys = curr_phys
 
-    try:
-        ctx.script_cmd_history[-1].append(name)
-        res = info["function"](values)
-        ir = res[0] if isinstance(res, tuple) else res
-        continue_parsing = res[1] if isinstance(res, tuple) else not is_cmd_terminator(name)
+    ctx.script_cmd_history[-1].append(name)
+    res = info["function"](values)
+    ir = res[0] if isinstance(res, tuple) else res
+    continue_parsing = res[1] if isinstance(res, tuple) else not is_cmd_terminator(name)
 
-        ir.address = curr_phys
+    ir.address = curr_phys
 
-        # Fix indentation
-        indent_for_line = ctx.indent
-        if name == "END_AREA" or name == "LOOP_UNTIL":
-            indent_for_line = max(indent_for_line - 1, 0)
+    # Fix indentation
+    indent_for_line = ctx.indent
+    if name == "END_AREA" or name == "LOOP_UNTIL":
+        indent_for_line = max(indent_for_line - 1, 0)
 
-        # The start of the block should be on the same level as commands before it
-        elif name == "AREA" or name == "LOOP_BEGIN":
-            indent_for_line = max(indent_for_line - 1, 0)
-        elif ctx.indent != prev_indent:
-            print(
-                f"error, some unsupported command ({name}) just changed the indentation {ctx.indent} != {prev_indent}"
-            )
+    # The start of the block should be on the same level as commands before it
+    elif name == "AREA" or name == "LOOP_BEGIN":
+        indent_for_line = max(indent_for_line - 1, 0)
+    elif ctx.indent != prev_indent:
+        print(
+            f"error, some unsupported command ({name}) just changed the indentation {ctx.indent} != {prev_indent}"
+        )
 
-        if indent_for_line < 0:
-            print(f"Fail indentation assertion: {name} at 0x{curr_phys:x}")
-            indent_for_line = 0
-        ir.indent = indent_for_line
+    if indent_for_line < 0:
+        print(f"Fail indentation assertion: {name} at 0x{curr_phys:x}")
+        indent_for_line = 0
+    ir.indent = indent_for_line
 
-        if ctx.deferred:
-            from deferred_output import ScriptRecord, RecordType
+    if ctx.deferred:
+        from deferred_output import ScriptRecord, RecordType
 
-            pending = getattr(ctx, "_pending_record", None)
-            if pending:
-                pending.command_ir = ir
-                ctx.deferred.add_record(pending)
-                ctx._pending_record = None
-            else:
-                ctx.deferred.add_record(ScriptRecord(RecordType.GENERIC, command_ir=ir))
+        pending = getattr(ctx, "_pending_record", None)
+        if pending:
+            pending.command_ir = ir
+            ctx.deferred.add_record(pending)
+            ctx._pending_record = None
+        else:
+            ctx.deferred.add_record(ScriptRecord(RecordType.GENERIC, command_ir=ir))
 
-        return continue_parsing, ir
-    except Exception as e:
-        _mark_error()
-        debug_fail(f"Exception at 0x{curr_phys:x}: {e}")
-        raise _wrap_script_exception(e, curr_phys)
+    return continue_parsing, ir
 
 
 def pending_parse(start, end=-1, label=None, label_non_recursive=None):
