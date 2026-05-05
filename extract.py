@@ -176,7 +176,8 @@ def download_and_patch(url):
                 continue
 
             for h in hacks:
-                if h.get("urlTitle") == slug:
+                url_title = h.get("urlTitle")
+                if url_title and url_title.lower() == slug.lower():
                     selected_hack = h
                     break
             if selected_hack:
