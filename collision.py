@@ -216,7 +216,7 @@ SPECIAL_PRESET_TYPES: Dict[int, int] = {
 # --- Parsing Helpers ---
 
 
-def _parse_vertices(rom: CustomBytesIO) -> Tuple[List[CommandIR], List[Tuple[int, int, int]]]:
+def _parse_vertices(rom: CustomBytesIO, x_coords: List[int], z_coords: List[int]) -> Tuple[List[CommandIR], List[Tuple[int, int, int]]]:
     vcount = rom.read_u16()
     ir_list = [CommandIR(TERRAIN_LOAD_VERTICES, [vcount], name="COL_VERTEX_INIT")]
     verts = []
@@ -225,6 +225,11 @@ def _parse_vertices(rom: CustomBytesIO) -> Tuple[List[CommandIR], List[Tuple[int
         verts.append((x, y, z))
         ctx.level_values.lowest_vtx_height = min(ctx.level_values.lowest_vtx_height, y)
         ctx.level_values.highest_vtx_height = max(ctx.level_values.highest_vtx_height, y)
+
+        # Track coordinates for averaging
+        x_coords.append(x)
+        z_coords.append(z)
+
         ir_list.append(CommandIR(TERRAIN_LOAD_VERTICES, [x, y, z], name="COL_VERTEX"))
     return ir_list, verts
 
@@ -349,6 +354,8 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
 def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int]:
     ir_list = []
     total_surfaces = 0
+    x_coords = []
+    z_coords = []
     try:
         cmd = rom.read_u16()
     except EOFError:
@@ -359,7 +366,7 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
     ir_list.append(CommandIR(0, [], name="COL_INIT"))
 
     # Pass 1: Vertices
-    v_ir, _ = _parse_vertices(rom)
+    v_ir, _ = _parse_vertices(rom, x_coords, z_coords)
     ir_list.extend(v_ir)
 
     # Pass 2: Triangles
@@ -390,6 +397,35 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
             total_surfaces += extra
             continue
         break
+
+    # Check if the level is 2D using averages
+    if len(x_coords) > 0:
+        avg_x = sum(x_coords) / len(x_coords)
+        avg_z = sum(z_coords) / len(z_coords)
+        mad_x = sum(abs(x - avg_x) for x in x_coords) / len(x_coords)
+        mad_z = sum(abs(z - avg_z) for z in z_coords) / len(z_coords)
+        left = min(mad_x, mad_z) if min(mad_x, mad_z) > 0 else 1
+        right = max(mad_x, mad_z)
+        is_2d = (right / left) > 5.0
+        if is_2d:
+            # Get highest and lowest X and Z
+            min_x = min(x_coords)
+            max_x = max(x_coords)
+            min_z = min(z_coords)
+            max_z = max(z_coords)
+            print(f"found 2d level {ctx.level_area} {mad_x}, {mad_z}   {right / left}")
+
+            from lua_modules import register_2d_area
+            register_2d_area(
+                ctx.level_area,
+                min_x,
+                max_x,
+                ctx.level_values.lowest_vtx_height,
+                ctx.level_values.highest_vtx_height,
+                min_z,
+                max_z,
+                mad_x > mad_z,
+            )
 
     return ir_list, total_surfaces
 

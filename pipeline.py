@@ -1024,6 +1024,10 @@ class ExtractionPipeline:
         if tweaks:
             ctx.txt.write_lua(tweaks, "tweaks.lua")
 
+        # Apply Lua modules
+        from lua_modules import apply_lua_modules
+        apply_lua_modules()
+
         # Handle MOP objects
         if ctx.found_mops:
             from mop import MOP_BEHAVIORS, MOP_SHARED_LUA
