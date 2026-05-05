@@ -174,7 +174,7 @@ class ExtractionPipeline:
         # Manual detection for SM64 Rom Manager
         offset = 0x1201FF8  # This address has the version info
         if len(rom_data) > offset + 8:
-            data = rom_data[offset:offset + 8]
+            data = rom_data[offset : offset + 8]
             dev_info = struct.unpack(">I", data[0:4])[0]
             major, minor, build, revision = struct.unpack("BBBB", data[4:8])
 
@@ -193,6 +193,7 @@ class ExtractionPipeline:
                 version += f".{revision}"
 
             from constants import ROM_MANAGER_VERSIONS
+
             if version in ROM_MANAGER_VERSIONS:
                 hack_type = "SM64 Rom Manager"
                 extra_rom_type_info = f" {version}"
@@ -201,14 +202,15 @@ class ExtractionPipeline:
         # Manual detection for Bowser's Blueprints
         offset = 0x3FFFFF8
         if len(rom_data) >= offset + 8:
-            data = rom_data[offset:offset + 8]
+            data = rom_data[offset : offset + 8]
 
             # Look for signature
             from constants import BBP_SIGNATURE
+
             if struct.unpack(">I", data[:4])[0] == BBP_SIGNATURE:
                 metadata_start = struct.unpack(">I", data[4:8])[0]  # ptr to version info
                 offset = metadata_start
-                major, minor, patch = struct.unpack(">HHH", rom_data[offset:offset + 6])
+                major, minor, patch = struct.unpack(">HHH", rom_data[offset : offset + 6])
 
                 version = f"v{major}.{minor}.{patch}"
                 hack_type = "Bowser's Blueprints"
@@ -1026,6 +1028,7 @@ class ExtractionPipeline:
 
         # Apply Lua modules
         from lua_modules import apply_lua_modules
+
         apply_lua_modules()
 
         # Handle MOP objects

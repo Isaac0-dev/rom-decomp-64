@@ -216,7 +216,9 @@ SPECIAL_PRESET_TYPES: Dict[int, int] = {
 # --- Parsing Helpers ---
 
 
-def _parse_vertices(rom: CustomBytesIO, x_coords: List[int], z_coords: List[int]) -> Tuple[List[CommandIR], List[Tuple[int, int, int]]]:
+def _parse_vertices(
+    rom: CustomBytesIO, x_coords: List[int], z_coords: List[int]
+) -> Tuple[List[CommandIR], List[Tuple[int, int, int]]]:
     vcount = rom.read_u16()
     ir_list = [CommandIR(TERRAIN_LOAD_VERTICES, [vcount], name="COL_VERTEX_INIT")]
     verts = []
@@ -416,6 +418,7 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
             print(f"found 2d level {ctx.level_area} {mad_x}, {mad_z}   {right / left}")
 
             from lua_modules import register_2d_area
+
             register_2d_area(
                 ctx.level_area,
                 min_x,

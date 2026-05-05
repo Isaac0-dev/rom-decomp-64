@@ -15,17 +15,20 @@ def register_2d_area(
     max_z: int,
     is_z_axis: bool,
 ):
-    _2d_areas.add((
-        level_area.curr_level,
-        level_area.curr_area,
-        min_x,
-        max_x,
-        min_y,
-        max_y,
-        min_z,
-        max_z,
-        is_z_axis,
-    ))
+    _2d_areas.add(
+        (
+            level_area.curr_level,
+            level_area.curr_area,
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            min_z,
+            max_z,
+            is_z_axis,
+        )
+    )
+
 
 def apply_lua_modules():
     content = []
@@ -43,19 +46,22 @@ def apply_lua_modules():
                 f"{min_x}, {max_x}, "
                 f"{min_y}, {max_y}, "
                 f"{min_z}, {max_z}" + " }, "
-                f"{"true" if is_z_axis else "false"}, 0 "
+                f"{'true' if is_z_axis else 'false'}, 0 "
                 "},\n"
             )
         content.append("}\n\n")
         content.append("-- Disable OMM camera for 2D areas\n")
         content.append("if OmmApi then\n")
-        content.append(f'    OmmApi.omm_register_game("{ctx.db.meta.internal_name}", function () return true end, function ()\n')
         content.append(
-"""        OmmApi.omm_register_game_data(-1, 2, LEVEL_PSS, true, false, 0, 250, nil)
+            f'    OmmApi.omm_register_game("{ctx.db.meta.internal_name}", function () return true end, function ()\n'
+        )
+        content.append(
+            """        OmmApi.omm_register_game_data(-1, 2, LEVEL_PSS, true, false, 0, 250, nil)
         for _, levelData in pairs(sLevelInformation) do
             OmmApi.omm_register_camera_no_collision_box(table.unpack(levelData[1]))
         end
-""")
+"""
+        )
         content.append("    end)\n")
         content.append("end\n")
 
