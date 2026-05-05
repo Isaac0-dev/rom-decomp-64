@@ -1046,6 +1046,7 @@ class ExtractionPipeline:
                     if mop_data.model_folders:
                         mop_actor_folders.update(mop_data.model_folders)
 
+            mop_lua_chunks[-1] = mop_lua_chunks[-1].rstrip() + "\n"
             ctx.txt.write_lua(mop_lua_chunks, "mop.lua")
             ctx.txt.create_file("data/behavior_data.c", content="\n".join(mop_c_chunks))
 

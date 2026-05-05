@@ -67,7 +67,6 @@ local cur_obj_update_floor_and_walls = cur_obj_update_floor_and_walls
 local cur_obj_if_hit_wall_bounce_away = cur_obj_if_hit_wall_bounce_away
 local cur_obj_move_standard = cur_obj_move_standard
 local cur_obj_update_floor_height_and_get_floor = cur_obj_update_floor_height_and_get_floor
-local count_objects_with_behavior = count_objects_with_behavior
 local cur_obj_become_tangible = cur_obj_become_tangible
 local obj_get_first_with_behavior_id = obj_get_first_with_behavior_id
 local obj_get_next_with_same_behavior_id = obj_get_next_with_same_behavior_id
@@ -1115,15 +1114,15 @@ register_mop_behavior(
     """
 function bhv_flipswitch_panel_starspawn_loop(obj)
     if not StarSpawned then
-        local flipswitches_count = count_objects_with_behavior(id_bhvFlipswitch_Panel_MOP)
+        local flipswitches_count = obj_count_objects_with_behavior_id(bhvFlipswitch_Panel_MOP)
         local flipswitches_active = 0
 
-        local curr_obj = obj_get_first_with_behavior_id(id_bhvFlipswitch_Panel_MOP)
+        local curr_obj = obj_get_first_with_behavior_id(bhvFlipswitch_Panel_MOP)
         while curr_obj do
             if curr_obj.oAnimState == 1 then
                 flipswitches_active = flipswitches_active + 1
             end
-            curr_obj = obj_get_next_with_behavior_id(curr_obj, id_bhvFlipswitch_Panel_MOP)
+            curr_obj = obj_get_next_with_same_behavior_id(curr_obj)
         end
 
         if flipswitches_active == flipswitches_count and flipswitches_count > 0 then
