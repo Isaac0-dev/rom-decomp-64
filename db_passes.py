@@ -52,7 +52,7 @@ MOP_ADDRESSES = {
     (0xF2, 0x13003AE0): ["bhvSwitchblock_Switch_MOP", 0x03022708],
     (0xF1, 0x13004EA0): ["bhvSwitchblock_MOP", 0x030226D4],
     # (0xB5, 0x13001608): ["bhvTrampoline_MOP", 0x0C000000],  # not implemented
-    (0x54, 0x130023D0): ["bhvBeta_Blarrg_MOP", 0x0C000224],
+    (0x54, 0x130023D0): ["bhvBlargg", 0x0C000224],
     (0, 0x130002A0): ["bhvFlipswitch_Panel_StarSpawn_MOP", None],
     (0, 0x13005104): ["bhvJukebox_MOP", None],
     (0, 0x130050B4): ["bhvEmitter_MOP", None],
