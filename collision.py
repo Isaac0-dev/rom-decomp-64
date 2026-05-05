@@ -415,7 +415,6 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
             max_x = max(x_coords)
             min_z = min(z_coords)
             max_z = max(z_coords)
-            print(f"found 2d level {ctx.level_area} {mad_x}, {mad_z}   {right / left}")
 
             from lua_modules import register_2d_area
 
