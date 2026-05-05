@@ -148,6 +148,10 @@ def download_and_patch(url):
     slug = m.group(1)
     debug_print(f"Detected slug: {slug}")
 
+    output_rom = f"{slug}.z64"
+    if os.path.exists(output_rom):
+        return output_rom
+
     search_queries = [slug, slug.replace("-", " ")]
     if "-" in slug:
         search_queries.extend(slug.split("-"))
@@ -243,7 +247,6 @@ def download_and_patch(url):
 
         from utils import vanilla_rom_path as base_rom_path
 
-        output_rom = f"{slug}.z64"
         debug_print(f"Patching {base_rom_path} with {patch_path} -> {output_rom}")
 
         try:
