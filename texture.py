@@ -39,15 +39,44 @@ class ImageSize(IntEnum):
 
 
 @dataclass
+class TileInfo:
+    fmt: Optional[int] = None
+    siz: Optional[int] = None
+    width: int = 0
+    height: int = 0
+    tmem: int = 0
+
+
+@dataclass
+class TextureSource:
+    addr: int
+    phys: int
+    seg_num: int
+    offset: int
+    fmt: int
+    siz: int
+    width: int
+    height: int
+    context_prefix: Optional[str] = None
+
+
+@dataclass
 class TextureInfo:
     addr: int = 0
+    phys: int = 0
     fmt: int = ImageFormat.RGBA
     siz: int = ImageSize.B16
-    tile_fmt: Optional[int] = None
-    tile_siz: Optional[int] = None
     width: int = 0
     height: int = 0
     context_prefix: Optional[str] = None
+    tiles: List[TileInfo] = None
+    tmem_map: Dict[int, TextureSource] = None
+
+    def __post_init__(self):
+        if self.tiles is None:
+            self.tiles = [TileInfo() for _ in range(8)]
+        if self.tmem_map is None:
+            self.tmem_map = {}
 
 
 @dataclass
@@ -107,13 +136,42 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
     offset = offset_from_segment_addr(addr)
     segment_data = segment
 
-    if offset + size > len(segment_data):
-        debug_print(
-            f"WARNING: TLUT data at 0x{addr:08X} exceeds segment bounds (offset: 0x{offset:X}, size: {size}, segment length: {len(segment_data)})"
-        )
-        return
+    # Validate mapping if we have a recorded physical address
+    if segment_data is not None and tex_info.phys != 0:
+        current_phys = segmented_to_virtual(addr)
+        if current_phys != tex_info.phys:
+            debug_print(
+                f"Mapping mismatch for palette at 0x{addr:08X}. "
+                f"Expected 0x{tex_info.phys:08X}, got 0x{current_phys:08X}. "
+                "Using ROM fallback."
+            )
+            segment_data = None
 
-    current_palette = segment_data[offset : offset + size]
+    if segment_data is None:
+        # ROM Fallback
+        phys = tex_info.phys if tex_info.phys != 0 else segmented_to_virtual(addr)
+        if ctx.rom:
+            try:
+                ctx.rom.seek(phys)
+                current_palette = ctx.rom.read(size)
+                if len(current_palette) != size:
+                    current_palette = None
+            except Exception as e:
+                debug_print(f"TLUT ROM fallback failed: {e}")
+                current_palette = None
+
+        if current_palette is None:
+            debug_print(f"WARNING: Segment {seg_num} not loaded for TLUT at 0x{addr:X}")
+            wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
+            return
+    else:
+        if offset + size > len(segment_data):
+            debug_print(
+                f"WARNING: TLUT data at 0x{addr:08X} exceeds segment bounds (offset: 0x{offset:X}, size: {size}, segment length: {len(segment_data)})"
+            )
+            return
+        current_palette = segment_data[offset : offset + size]
+
     # Mark the record as a palette so we don't try to write it as an image
     phys = segmented_to_virtual(addr)
     name = f"texture_{addr:08X}_{phys:08X}_seg{seg_num}"
@@ -149,6 +207,7 @@ def _write_png_worker(
     seg_num: int,
     segment_data: Union[bytearray, bytes, List[int]],
     palette: Optional[Union[bytearray, bytes, List[int]]],
+    phys: Optional[int] = None,
 ) -> None:
 
     # TODO This is a hack!
@@ -182,12 +241,28 @@ def _write_png_worker(
                     )
                     _skipped_textures.add(name)
                 data_source = alt_data
-            else:
+            elif phys is not None and ctx.rom:
+                # Try physical ROM fallback
+                try:
+                    ctx.rom.seek(phys)
+                    rom_data = ctx.rom.read(required_bytes)
+                    if len(rom_data) == required_bytes:
+                        if name not in _skipped_textures:
+                            debug_print(f"Using physical ROM fallback for {name} at 0x{phys:08X}")
+                            _skipped_textures.add(name)
+                        data_source = rom_data
+                        offset = 0  # We read exactly what we need
+                        seg_len = required_bytes
+                        available = required_bytes
+                except Exception as e:
+                    debug_print(f"Physical ROM fallback failed for {name}: {e}")
+
+            if available < required_bytes:
                 if name not in _skipped_textures:
                     reason = "offset" if offset >= seg_len else "size"
                     if reason == "offset":
                         debug_print(
-                            f"Skipping texture {name}: offset 0x{offset:X} is beyond segment data (len 0x{seg_len:X})"
+                            f"Skipping texture {name}: offset 0x{offset:X} is beyond data (len 0x{seg_len:X})"
                         )
                     else:
                         debug_print(
@@ -224,8 +299,9 @@ def write_texture(
     bpp: int,
     offset: int,
     seg_num: int,
-    segment_data: Union[bytearray, bytes, List[int]],
+    segment_data: Optional[Union[bytearray, bytes, List[int]]],
     palette: Optional[Union[bytearray, bytes, List[int]]],
+    phys: Optional[int] = None,
 ) -> None:
     """Store raw pixel data on the TextureRecord for deferred writing."""
     if fmt == ImageFormat.CI and palette is None:
@@ -241,31 +317,46 @@ def write_texture(
     rec = ctx.db.textures[name]
     # Snapshot the raw bytes now while the segment is loaded
     required_bytes = (w * h * bpp + 7) // 8
-    available = len(segment_data) - offset
-    if offset < len(segment_data) and available >= required_bytes:
-        rec.segment_data = bytes(segment_data[offset : offset + required_bytes])
-    else:
-        # Try alternate segment cache
-        for key, cached in segment._segment_cache.items():
-            if len(key) < 2 or key[1] != seg_num:
-                continue
-            data = cached.get("data")
-            if not data:
-                continue
-            if offset < len(data) and len(data) - offset >= required_bytes:
-                rec.segment_data = bytes(data[offset : offset + required_bytes])
-                break
+
+    if segment_data is not None:
+        available = len(segment_data) - offset
+        if offset < len(segment_data) and available >= required_bytes:
+            rec.segment_data = bytes(segment_data[offset : offset + required_bytes])
+        else:
+            # Try alternate segment cache
+            for key, cached in segment._segment_cache.items():
+                if len(key) < 2 or key[1] != seg_num:
+                    continue
+                data = cached.get("data")
+                if not data:
+                    continue
+                if offset < len(data) and len(data) - offset >= required_bytes:
+                    rec.segment_data = bytes(data[offset : offset + required_bytes])
+                    break
+
+    if rec.segment_data is None and phys is not None and ctx.rom:
+        # Fallback to physical ROM reading
+        try:
+            ctx.rom.seek(phys)
+            rom_data = ctx.rom.read(required_bytes)
+            if len(rom_data) == required_bytes:
+                rec.segment_data = bytes(rom_data)
+        except Exception as e:
+            debug_print(f"write_texture physical fallback failed for {name}: {e}")
+
     if palette is not None:
         rec.palette_data = bytes(palette)
 
     if rec.segment_data is None:
         debug_print(
             f"write_texture failed to snapshot {name} (seg {seg_num}, offset 0x{offset:X}, "
-            f"needs {required_bytes} bytes, available {available})"
+            f"needs {required_bytes} bytes)"
         )
 
 
-def set_tile_size(tile: int, uls: int, ult: int, lrs: int, lrt: int) -> None:
+def set_tile_size(
+    tile: int, uls: int, ult: int, lrs: int, lrt: int, overwrite: bool = True
+) -> None:
     global current_texture_info
 
     # Calculate width and height from tile size
@@ -273,65 +364,53 @@ def set_tile_size(tile: int, uls: int, ult: int, lrs: int, lrt: int) -> None:
     w = ((lrs - uls) >> 2) + 1
     h = ((lrt - ult) >> 2) + 1
 
-    current_texture_info.width = w
-    current_texture_info.height = h
+    if 0 <= tile < 8:
+        tile_info = current_texture_info.tiles[tile]
+        if overwrite or tile_info.width <= 0 or tile_info.height <= 0:
+            tile_info.width = w
+            tile_info.height = h
 
 
 def set_tile_format(tile: int, fmt: int, siz: Optional[int], tmem: int) -> None:
     global current_texture_info
 
-    # Only use the load tile slot (slot 7)
-    if tile != G_TX_LOADTILE:
-        return
-
-    if current_texture_info.tile_fmt is not None and current_texture_info.tile_fmt != fmt:
-        debug_print(f"Conflicting tile_fmt: {current_texture_info.tile_fmt} != {fmt}")
-        return
-
-    current_texture_info.tile_fmt = fmt
-    current_texture_info.tile_siz = siz
+    if 0 <= tile < 8:
+        current_texture_info.tiles[tile].fmt = fmt
+        current_texture_info.tiles[tile].siz = siz
+        current_texture_info.tiles[tile].tmem = tmem
 
 
 def set_texture_image(
-    segmented_addr: int, fmt: int, siz: int, width: int, context_prefix: Optional[str] = None
+    segmented_addr: int,
+    fmt: int,
+    siz: int,
+    width: int,
+    context_prefix: Optional[str] = None,
+    phys_override: Optional[int] = None,
 ) -> str:
     global current_texture_info
 
+    phys = phys_override if phys_override is not None else segmented_to_virtual(segmented_addr)
+    seg_num = segment_from_addr(segmented_addr)
+
     current_texture_info.addr = segmented_addr
-    current_texture_info.fmt = fmt  # Fallback only
+    current_texture_info.phys = phys
+    current_texture_info.fmt = fmt
     current_texture_info.siz = siz
     current_texture_info.width = width
     current_texture_info.height = 0
     current_texture_info.context_prefix = context_prefix
 
-    # Reset tile-specific overrides from previous textures
-    current_texture_info.tile_fmt = None
-    current_texture_info.tile_siz = None
-
-    phys = segmented_to_virtual(segmented_addr)
-    seg_num = segment_from_addr(segmented_addr)
+    # Reset tile state for the new image. Leaving default/stale TMEM or dimensions
+    # around can make an unconfigured tile look like it renders the new texture.
+    current_texture_info.tiles = [TileInfo() for _ in range(8)]
+    current_texture_info.tmem_map = {}
 
     name = f"texture_{segmented_addr:08X}_{phys:08X}_seg{seg_num}"
     if context_prefix:
         name = f"{context_prefix}_{name}"
 
-    if name not in ctx.db.textures:
-        from rom_database import TextureRecord
-
-        ctx.db.textures[name] = TextureRecord(
-            addr=segmented_addr,
-            phys=phys,
-            seg_num=seg_num,
-            offset=offset_from_segment_addr(segmented_addr),
-            fmt=fmt,
-            siz=siz,
-            width=width,
-            height=0,  # Unknown yet
-            name=name,
-        )
-        ctx.db.set_symbol(segmented_addr, name, "Texture")
-
-    return ctx.db.textures[name]
+    return name
 
 
 def load_block(
@@ -350,28 +429,23 @@ def load_block(
         tex_info = current_texture_info
 
     addr = tex_info.addr
-    # Use tile_fmt/siz if set, otherwise fallback to fmt/siz
-    fmt = tex_info.tile_fmt if tex_info.tile_fmt is not None else tex_info.fmt
-    siz = tex_info.tile_siz if tex_info.tile_siz is not None else tex_info.siz
+    phys = tex_info.phys
+
+    # Get formats from the tile doing the loading (usually G_TX_LOADTILE)
+    tile_info = tex_info.tiles[tile] if 0 <= tile <= G_TX_LOADTILE else None
+
+    fmt = tile_info.fmt if tile_info and tile_info.fmt is not None else tex_info.fmt
+    siz = tile_info.siz if tile_info and tile_info.siz is not None else tex_info.siz
     width = tex_info.width
     context_prefix = tex_info.context_prefix
 
     if addr == 0:
         return
 
-    phys = segmented_to_virtual(addr)
     seg_num = segment_from_addr(addr)
-
-    name = f"texture_{addr:08X}_{phys:08X}_seg{seg_num}"
-    if context_prefix:
-        name = f"{context_prefix}_{name}"
-
     offset = offset_from_segment_addr(addr)
-    segment_data = get_segment(seg_num)
-    if segment_data is None:
-        debug_print(f"WARNING: Segment {seg_num} for texture 0x{addr:08X} not loaded")
-        wait_for_segment_load(load_block, addr, (sTxt, pos, tile, uls, ult, lrs, dxt, tex_info))
-        return
+
+    # We don't block for get_segment anymore here, we do it in commit_textures!
 
     # bits per pixel
     image_size_type_to_bpp = [4, 8, 16, 32]
@@ -391,124 +465,140 @@ def load_block(
 
     h = (texels + w - 1) // w
 
-    palette = current_palette if fmt == ImageFormat.CI else None
-
-    texture_table[name] = TextureMeta(
-        fmt=fmt,
-        w=w,
-        h=h,
-        bpp=bpp,
-        offset=offset,
-        seg_num=seg_num,
-        segment_data=segment_data,
-        palette=palette,
+    # Store into TMEM map for the specific TMEM address of the loading tile
+    tmem_addr = tile_info.tmem if tile_info else 0
+    tex_info.tmem_map[tmem_addr] = TextureSource(
         addr=addr,
         phys=phys,
-        dl_pos=pos,
+        seg_num=seg_num,
+        offset=offset,
+        fmt=fmt,
+        siz=siz,
+        width=w,
+        height=h,
+        context_prefix=context_prefix,
     )
-
-    from rom_database import TextureRecord
-
-    if name in ctx.db.textures:
-        rec = ctx.db.textures[name]
-        rec.width = w
-        rec.height = h
-        rec.fmt = fmt
-        rec.siz = siz
-    else:
-        ctx.db.textures[name] = TextureRecord(
-            addr=addr,
-            phys=phys,
-            seg_num=seg_num,
-            offset=offset,
-            fmt=fmt,
-            siz=siz,
-            width=w,
-            height=h,
-            name=name,
-        )
-    ctx.db.set_symbol(addr, name, "Texture")
-    write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
 
 
 def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt: int) -> None:
     global current_texture_info
 
     addr = current_texture_info.addr
-    # Use tile_fmt if set (from G_SETTILE), otherwise fallback to fmt (from G_SETTIMG)
-    fmt = (
-        current_texture_info.tile_fmt
-        if current_texture_info.tile_fmt is not None
-        else current_texture_info.fmt
-    )
-    siz = (
-        current_texture_info.tile_siz
-        if current_texture_info.tile_siz is not None
-        else current_texture_info.siz
-    )
+    phys = current_texture_info.phys
+    tile_info = current_texture_info.tiles[tile] if 0 <= tile < 8 else None
+    fmt = tile_info.fmt if tile_info and tile_info.fmt is not None else current_texture_info.fmt
+    siz = tile_info.siz if tile_info and tile_info.siz is not None else current_texture_info.siz
     context_prefix = current_texture_info.context_prefix
 
     if addr == 0:
         return
 
-    phys = segmented_to_virtual(addr)
-
     seg_num = segment_from_addr(addr)
     offset = offset_from_segment_addr(addr)
-    segment_data = get_segment(seg_num)
-    if segment_data is None:
-        debug_print(f"WARNING: Segment {seg_num} for texture 0x{addr:08X} not loaded")
-        return
-
-    name = f"texture_{addr:08X}_{phys:08X}_seg{seg_num}"
-    if context_prefix:
-        name = f"{context_prefix}_{name}"
-
-    image_size_type_to_bpp = [4, 8, 16, 32]
-    bpp = image_size_type_to_bpp[siz]
 
     w = ((lrs - uls) >> 2) + 1
     h = ((lrt - ult) >> 2) + 1
 
-    palette = current_palette if fmt == ImageFormat.CI else None
-
-    texture_table[name] = TextureMeta(
-        fmt=fmt,
-        w=w,
-        h=h,
-        bpp=bpp,
-        offset=offset,
-        seg_num=seg_num,
-        segment_data=segment_data,
-        palette=palette,
+    tmem_addr = tile_info.tmem if tile_info else 0
+    current_texture_info.tmem_map[tmem_addr] = TextureSource(
         addr=addr,
         phys=phys,
-        dl_pos=pos,
+        seg_num=seg_num,
+        offset=offset,
+        fmt=fmt,
+        siz=siz,
+        width=w,
+        height=h,
+        context_prefix=context_prefix,
     )
 
-    from rom_database import TextureRecord
 
-    if name in ctx.db.textures:
-        rec = ctx.db.textures[name]
-        rec.width = w
-        rec.height = h
-        rec.fmt = fmt
-        rec.siz = siz
-    else:
-        ctx.db.textures[name] = TextureRecord(
-            addr=addr,
-            phys=phys,
-            seg_num=seg_num,
-            offset=offset,
-            fmt=fmt,
-            siz=siz,
-            width=w,
-            height=h,
-            name=name,
+def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
+    global current_texture_info
+
+    for tile_idx in tile_indices:
+        if not (0 <= tile_idx < 8):
+            continue
+
+        tile_cfg = current_texture_info.tiles[tile_idx]
+        tile_is_configured = (
+            tile_cfg.fmt is not None
+            or tile_cfg.siz is not None
+            or tile_cfg.width > 0
+            or tile_cfg.height > 0
         )
-    ctx.db.set_symbol(addr, name, "Texture")
+        if not tile_is_configured and tile_idx != G_TX_RENDERTILE:
+            continue
 
-    write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette)
+        # Find what source is in this tile's TMEM
+        source = current_texture_info.tmem_map.get(tile_cfg.tmem)
+        if not source:
+            # Fallback if tmem_map is incomplete
+            # Find the most recently added source or assume TMEM 0
+            source = current_texture_info.tmem_map.get(0)
+            if not source:
+                continue
+
+        # Use rendering time metadata if available, otherwise source
+        fmt = tile_cfg.fmt if tile_cfg.fmt is not None else source.fmt
+        siz = tile_cfg.siz if tile_cfg.siz is not None else source.siz
+        w = tile_cfg.width if tile_cfg.width > 0 else source.width
+        h = tile_cfg.height if tile_cfg.height > 0 else source.height
+
+        if w <= 0 or h <= 0:
+            debug_print(f"Skipping tile {tile_idx} because calculated w={w}, h={h}")
+            continue
+
+        image_size_type_to_bpp = [4, 8, 16, 32]
+        bpp = image_size_type_to_bpp[siz]
+
+        phys = source.phys
+        name = f"texture_{source.addr:08X}_{phys:08X}_seg{source.seg_num}"
+        if source.context_prefix:
+            name = f"{source.context_prefix}_{name}"
+
+        palette = current_palette if fmt == ImageFormat.CI else None
+
+        segment_data = get_segment(source.seg_num)
+
+        # Check that the current segment mapping matches the
+        # physical address we are committing. If they don't match,
+        # it means we are re-simulating a display list in a context where
+        # the segment is mapped to a different location.
+        if segment_data is not None:
+            current_phys = segmented_to_virtual(source.addr)
+            if current_phys != phys:
+                key = (name, phys, current_phys)
+                segment_data = None
+
+        # Create or update TextureRecord
+        from rom_database import TextureRecord
+
+        if name in ctx.db.textures:
+            rec = ctx.db.textures[name]
+            rec.fmt = fmt
+            rec.siz = siz
+            rec.width = w
+            rec.height = h
+        else:
+            ctx.db.textures[name] = TextureRecord(
+                addr=source.addr,
+                phys=phys,
+                seg_num=source.seg_num,
+                offset=source.offset,
+                fmt=fmt,
+                siz=siz,
+                width=w,
+                height=h,
+                name=name,
+                context_prefix=source.context_prefix,
+            )
+        ctx.db.set_symbol(source.addr, name, "Texture")
+
+        # Explicitly pass the physical address for the rom fallback
+        write_texture(
+            sTxt, name, fmt, w, h, bpp, source.offset, source.seg_num, segment_data, palette, phys
+        )
 
 
 SCALE_5_8 = [x * 255 // 31 for x in range(32)]
@@ -745,6 +835,7 @@ class TextureProcessor(BaseProcessor):
                 record.seg_num,
                 record.segment_data,  # pre-sliced bytes
                 palette,
+                record.phys,
             )
             if self.txt:
                 self.txt.register_future(future)

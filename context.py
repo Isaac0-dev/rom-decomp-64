@@ -90,7 +90,6 @@ class ExtractionContext:
     data: Any = None
     txt: Any = None
     db: Any = None
-    current_context_prefix: Optional[str] = None
 
     level_values: LevelValues = field(default_factory=LevelValues)
     behavior_values: BehaviorValues = field(default_factory=BehaviorValues)
@@ -125,6 +124,15 @@ class ExtractionContext:
     deferred: Any = None
 
     cmd_bytes: bytes = b""
+
+    @property
+    def current_context_prefix(self) -> Optional[str]:
+        context_parts = [
+            p
+            for p in self.level_script_tracker
+            if p != "script_exec_level_table" and "script_0x" not in p
+        ]
+        return "_".join(context_parts) if context_parts else None
 
     @property
     def curr_level(self) -> int:

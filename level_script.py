@@ -139,6 +139,10 @@ class LevelScriptProcessor(BaseProcessor):
             ctx.deferred.model_table.update(prev_deferred.model_table)
         ctx._pending_record = None
 
+        from segment import get_pool_depth, pop_pool_state
+
+        initial_pool_depth = get_pool_depth()
+
         _scripts_in_progress.add(seg_phys_start)
         try:
             script_name = ""
@@ -175,23 +179,13 @@ class LevelScriptProcessor(BaseProcessor):
 
             parsed_scripts.add((seg_phys_start, name))
 
-            context_parts = [
-                p
-                for p in ctx.level_script_tracker
-                if p != "script_exec_level_table" and "script_0x" not in p
-            ]
-            context_prefix = "_".join(context_parts) if context_parts else None
-            ctx.current_context_prefix = context_prefix
-
             _current_script_had_error = False
             rom.seek(seg_offset, 0)
             commands_ir = []
 
             while True:
                 try:
-                    continueParsing, ir = parse_line(
-                        rom, seg_offset, seg_phys_start, context_prefix
-                    )
+                    continueParsing, ir = parse_line(rom, seg_offset, seg_phys_start)
                 except Exception as e:
                     e = _wrap_script_exception(e, seg_phys_start)
                     _mark_error()
@@ -215,6 +209,8 @@ class LevelScriptProcessor(BaseProcessor):
             return record
 
         finally:
+            while get_pool_depth() > initial_pool_depth:
+                pop_pool_state()
             _scripts_in_progress.discard(seg_phys_start)
             ctx.script_cmd_history.pop()
             ctx.level_script_tracker.pop()
@@ -327,7 +323,7 @@ def expand_level_script_into(dest: LevelRecord, indent: int, src: LevelRecord, i
     return command_count
 
 
-def parse_line(rom, seg_offset, seg_phys_start, context_prefix=None):
+def parse_line(rom, seg_offset, seg_phys_start):
     from level_commands import parse_command_table, CMD_BBH
 
     prev_offset = rom.tell()

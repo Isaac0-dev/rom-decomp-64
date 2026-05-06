@@ -75,7 +75,7 @@ class GBI2(GBI1):
                     h = 64
 
                 # Store dimensions for texture extraction
-                set_tile_size(tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2)
+                set_tile_size(tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2, overwrite=False)
 
     def execute_vertex(self, cmd0, cmd1, dis):
         count = self._SHIFTR(cmd0, 12, 8)
@@ -105,6 +105,12 @@ class GBI2(GBI1):
         v2 = self._SHIFTR(cmd0, 17, 7)
 
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd("gsSP1Triangle", {"v0": v0, "v1": v1, "v2": v2, "flag": 0})
 
     def execute_tri2(self, cmd0, cmd1, dis):
@@ -116,6 +122,12 @@ class GBI2(GBI1):
         v12 = self._SHIFTR(cmd0, 17, 7)
 
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd(
                 "gsSP2Triangles",
                 {
@@ -247,6 +259,12 @@ class GBI2(GBI1):
         v12 = self._SHIFTR(cmd0, 17, 7)
 
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd(
                 "gsSP1Quadrangle",
                 {"v0": v00, "v1": v01, "v2": v02, "v3": v12, "flag": 0},
@@ -256,6 +274,12 @@ class GBI2(GBI1):
         v0 = self._SHIFTR(cmd1, 1, 7)
         v1 = self._SHIFTR(cmd1, 9, 7)
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd("gsSPLine3D", {"v0": v0, "v1": v1, "flag": 0}, commented_out=True)
 
     def execute_bg_rect_1cyc(self, cmd0, cmd1, dis):

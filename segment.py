@@ -107,13 +107,17 @@ _segment_pool: Deque[Optional[Any]] = deque()
 
 def push_pool_state() -> None:
     _segment_pool.append(None)
-    # debug_print("Pushed segment pool state.")
+    # debug_print(f"Pushed segment pool state. Depth: {len(_segment_pool)}")
+
+
+def get_pool_depth() -> int:
+    return len(_segment_pool)
 
 
 # Pops everything from the pool
 def pop_pool_state() -> None:
     if _segment_pool:
-        _segment_pool.pop()  # discard saved snapshot; keep current segments alive
+        _segment_pool.pop()  # discard saved marker; keep current segments alive
         # debug_print("Popped segment pool state (segments retained).")
     else:
         debug_print("Segment pool is empty. Cannot pop state.")
@@ -437,12 +441,14 @@ def get_loaded_segment_numbers() -> List[int]:
 
 
 def segmented_to_virtual(segmented_addr: int) -> int:
-    seg_phys_start = segmented_addr
     seg_num = segment_from_addr(segmented_addr)
-    if seg_num != 0:
-        offset = offset_from_segment_addr(segmented_addr)
-        location = where_is_segment_loaded(seg_num)
-        if location is not None:
-            seg_phys_start, _ = location
-            seg_phys_start += offset
-    return seg_phys_start
+    if seg_num == 0:  # address is already physical
+        return segmented_addr
+
+    location = where_is_segment_loaded(seg_num)
+    if location is None:
+        return segmented_addr
+
+    seg_phys_start_rom, _ = location
+    offset = offset_from_segment_addr(segmented_addr)
+    return seg_phys_start_rom + offset

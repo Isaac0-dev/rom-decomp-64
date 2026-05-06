@@ -857,7 +857,6 @@ class ExtractionPipeline:
         # Reset context state so that path deduction is string-based during serialization
         ctx.curr_level = -1
         ctx.curr_area = -1
-        ctx.current_context_prefix = None
 
         assert self.txt is not None
 

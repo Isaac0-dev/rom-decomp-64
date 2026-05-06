@@ -18,6 +18,7 @@ from texture import (
     set_texture_image,
     set_tile_format,
     set_tile_size,
+    commit_textures,
 )
 from context import LevelAreaContext
 from rom_database import CommandIR, RomDatabase
@@ -124,10 +125,14 @@ class Microcode(ABC):
         siz = G_IM_SIZ_MAP.get(siz_val, str(siz_val))
 
         if dis:
+            from segment import segmented_to_virtual
+
+            phys_addr = segmented_to_virtual(texture_addr)
             dis.side_effects.append(
                 {
                     "type": "set_texture_image",
                     "addr": texture_addr,
+                    "phys": phys_addr,
                     "fmt": fmt_val,
                     "siz": siz_val,
                     "width": width,
@@ -135,7 +140,7 @@ class Microcode(ABC):
                 }
             )
             texture_record = set_texture_image(
-                texture_addr, fmt_val, siz_val, width, dis.context_prefix
+                texture_addr, fmt_val, siz_val, width, dis.context_prefix, phys_addr
             )
             dis.set_cmd(
                 "gsDPSetTextureImage",
@@ -453,6 +458,10 @@ class Microcode(ABC):
         lrt = self._SHIFTR(cmd1, 0, 12)
         fn = "gsDPTextureRectangleFlip" if flip else "gsDPTextureRectangle"
         if dis:
+            commit_textures(dis.sTxt, dis.current_pos, [tile])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [tile]}
+            )
             dis.set_cmd(
                 fn,
                 {"uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt, "tile": tile, "sft": 0, "tft": 0},

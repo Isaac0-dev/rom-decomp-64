@@ -535,6 +535,7 @@ class RomDatabase:
 
     trajectories: Dict[Tuple[int, int], TrajectoryRecord] = field(default_factory=dict)
     display_lists: Dict[Tuple[int, int], DisplayListRecord] = field(default_factory=dict)
+    display_lists_by_name: Dict[str, DisplayListRecord] = field(default_factory=dict)
     collisions: Dict[Tuple[int, int], CollisionRecord] = field(default_factory=dict)
     water_boxes: Dict[Tuple[int, int], WaterBoxRecord] = field(default_factory=dict)
     rooms: Dict[Tuple[int, int], RoomsRecord] = field(default_factory=dict)

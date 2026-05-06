@@ -64,6 +64,13 @@ class GBI0(GBI1):
         idx01 = self._SHIFTR(cmd1, 0, 4)
 
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
+
             indices_list = []
 
             if idx00 != idx01:

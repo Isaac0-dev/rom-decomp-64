@@ -58,7 +58,10 @@ class Disassembler:
         self.commands.append(ir)
 
     def parse_dl(self, address: int) -> Optional[DisplayListRecord]:
-        return parse_display_list(address, self.sTxt, self.context_prefix)
+        record = parse_display_list(address, self.sTxt, self.context_prefix)
+        if record:
+            self.side_effects.append({"type": "display_list", "name": record.name})
+        return record
 
 
 def _SHIFTR(val: int, shift: int, size: int) -> int:
@@ -199,6 +202,7 @@ class DisplayListProcessor(BaseProcessor):
             location=self.ctx.level_area,
         )
         self.ctx.db.display_lists[db_key] = record
+        self.ctx.db.display_lists_by_name[dl_name] = record
         self.ctx.db.set_symbol(segmented_addr, dl_name, "Gfx")
 
         return record
@@ -227,6 +231,7 @@ class DisplayListProcessor(BaseProcessor):
             set_texture_image,
             set_tile_format,
             set_tile_size,
+            commit_textures,
         )
 
         for effect in record.side_effects:
@@ -238,6 +243,7 @@ class DisplayListProcessor(BaseProcessor):
                     effect["siz"],
                     effect["width"],
                     effect["context_prefix"],
+                    phys_override=effect.get("phys"),
                 )
             elif etype == "set_tile":
                 set_tile_format(effect["tile"], effect["fmt"], effect["siz"], effect.get("tmem", 0))
@@ -268,6 +274,12 @@ class DisplayListProcessor(BaseProcessor):
                 )
             elif etype == "load_tlut":
                 load_tlut(sTxt, effect["count"], 0, None)
+            elif etype == "commit_textures":
+                commit_textures(sTxt, effect["pos"], effect["tiles"])
+            elif etype == "display_list":
+                child_record = self.ctx.db.display_lists_by_name.get(effect["name"])
+                if child_record:
+                    self.re_simulate_side_effects(child_record, sTxt)
 
 
 _dl_processor = None

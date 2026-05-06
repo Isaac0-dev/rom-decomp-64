@@ -569,23 +569,11 @@ def AREA(values):
     ctx.level_script_tracker.append(area_label)
     ctx.curr_area = index
 
-    # Update context prefix for children (DLs, Geos, etc)
-    # If we have a level name (e.g. 'bbh'), prefix becomes 'bbh_area_1'
-    if ctx.current_context_prefix:
-        prefix = area_label
-        if ctx.curr_level != -1:
-            from utils import level_num_to_str
-
-            prefix = f"{level_num_to_str[ctx.curr_level]}_{area_label}"
-        ctx.current_context_prefix = prefix
-    else:
-        ctx.current_context_prefix = area_label
-
-    geo_prefix = ctx.current_context_prefix
-
     from geo_layout import parse_geo_layout
 
-    geo_rec = parse_geo_layout(geo, ctx.txt, context_prefix=geo_prefix, is_level=True)
+    geo_rec = parse_geo_layout(
+        geo, ctx.txt, context_prefix=ctx.current_context_prefix, is_level=True
+    )
 
     params = [
         index,

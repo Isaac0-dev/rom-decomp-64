@@ -14,7 +14,7 @@ from gbi_defines import (
 )
 import vertices
 from typing import Dict, cast
-from texture import set_tile_size
+from texture import set_tile_size, commit_textures
 from utils import debug_print
 
 
@@ -256,6 +256,10 @@ class GBI1(Microcode):
         v12 = self._SHIFTR(cmd1, 0, 8) // self.vertex_stride
 
         if dis:
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd(
                 "gsSP2Triangles",
                 {
@@ -287,6 +291,10 @@ class GBI1(Microcode):
 
     def execute_line_3d(self, cmd0, cmd1, dis):
         if dis:
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd("gsSPLine3D", {"w0": cmd0, "w1": cmd1})
             v0 = self._SHIFTR(cmd0, 16, 8)
             wd = self._SHIFTR(cmd1, 24, 8)
@@ -365,7 +373,7 @@ class GBI1(Microcode):
                     h = 64
 
                 # Store dimensions for texture extraction
-                set_tile_size(tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2)
+                set_tile_size(tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2, overwrite=False)
 
             dis.set_cmd(
                 "gsSPTexture",
@@ -429,6 +437,10 @@ class GBI1(Microcode):
         flag = self._SHIFTR(cmd1, 24, 8)
 
         if dis:
+            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
+            )
             dis.set_cmd("gsSP1Triangle", {"v0": v0, "v1": v1, "v2": v2, "flag": flag})
 
     def execute_dp_set_other_mode(self, cmd0, cmd1, dis):
