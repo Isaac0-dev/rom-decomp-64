@@ -45,6 +45,7 @@ class TileInfo:
     width: int = 0
     height: int = 0
     tmem: int = 0
+    config_pos: int = 0
 
 
 @dataclass
@@ -370,7 +371,7 @@ def write_texture(
 
 
 def set_tile_size(
-    tile: int, uls: int, ult: int, lrs: int, lrt: int, overwrite: bool = True
+    pos: int, tile: int, uls: int, ult: int, lrs: int, lrt: int, overwrite: bool = True
 ) -> None:
     global current_texture_info
 
@@ -384,15 +385,17 @@ def set_tile_size(
         if overwrite or tile_info.width <= 0 or tile_info.height <= 0:
             tile_info.width = w
             tile_info.height = h
+            tile_info.config_pos = pos
 
 
-def set_tile_format(tile: int, fmt: int, siz: Optional[int], tmem: int) -> None:
+def set_tile_format(pos: int, tile: int, fmt: int, siz: Optional[int], tmem: int) -> None:
     global current_texture_info
 
     if 0 <= tile < 8:
         current_texture_info.tiles[tile].fmt = fmt
         current_texture_info.tiles[tile].siz = siz
         current_texture_info.tiles[tile].tmem = tmem
+        current_texture_info.tiles[tile].config_pos = pos
 
 
 def set_texture_image(
@@ -416,10 +419,6 @@ def set_texture_image(
     current_texture_info.height = 0
     current_texture_info.context_prefix = context_prefix
 
-    # Reset tile state for the new image. Leaving default/stale TMEM or dimensions
-    # around can make an unconfigured tile look like it renders the new texture.
-    current_texture_info.tiles = [TileInfo() for _ in range(8)]
-    current_texture_info.tmem_map = {}
 
     name = f"texture_{segmented_addr:08X}_{phys:08X}_seg{seg_num}"
     if context_prefix:
@@ -477,8 +476,6 @@ def load_block(
 
     seg_num = segment_from_addr(addr)
     offset = offset_from_segment_addr(addr)
-
-    # We don't block for get_segment anymore here, we do it in commit_textures!
 
     # bits per pixel
     image_size_type_to_bpp = [4, 8, 16, 32]
@@ -549,7 +546,10 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
 def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
     global current_texture_info
 
-    for tile_idx in tile_indices:
+    # Process tiles in order of most recently configured
+    sorted_tile_indices = sorted(tile_indices, key=lambda i: (current_texture_info.tiles[i].config_pos, -i))
+
+    for tile_idx in sorted_tile_indices:
         if not (0 <= tile_idx < 8):
             continue
 

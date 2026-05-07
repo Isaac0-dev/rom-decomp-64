@@ -191,9 +191,10 @@ class Microcode(ABC):
                     "fmt": fmt_val,
                     "siz": siz_val,
                     "tmem": tmem,
+                    "pos": dis.current_pos,
                 }
             )
-            set_tile_format(tile_val, fmt_val, siz_val, tmem)
+            set_tile_format(dis.current_pos, tile_val, fmt_val, siz_val, tmem)
             dis.set_cmd(
                 "gsDPSetTile",
                 {
@@ -346,9 +347,10 @@ class Microcode(ABC):
                     "ult": ult,
                     "lrs": lrs,
                     "lrt": lrt,
+                    "pos": dis.current_pos,
                 }
             )
-            set_tile_size(tile, uls, ult, lrs, lrt)
+            set_tile_size(dis.current_pos, tile, uls, ult, lrs, lrt)
             dis.set_cmd(
                 "gsDPSetTileSize",
                 {"tile": tile_name, "uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt},

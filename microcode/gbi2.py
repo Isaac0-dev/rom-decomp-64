@@ -75,7 +75,7 @@ class GBI2(GBI1):
                     h = 64
 
                 # Store dimensions for texture extraction
-                set_tile_size(tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2, overwrite=False)
+                set_tile_size(dis.current_pos, tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2, overwrite=False)
 
     def execute_vertex(self, cmd0, cmd1, dis):
         count = self._SHIFTR(cmd0, 12, 8)
