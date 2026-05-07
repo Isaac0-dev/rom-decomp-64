@@ -178,9 +178,24 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
     if tex_info.context_prefix:
         name = f"{tex_info.context_prefix}_{name}"
 
+    from rom_database import TextureRecord
+
     if name in ctx.db.textures:
-        ctx.db.textures[name].is_palette = True
-        ctx.db.textures[name].palette_data = current_palette
+        rec = ctx.db.textures[name]
+        rec.is_palette = True
+        rec.palette_data = current_palette
+    else:
+        ctx.db.textures[name] = TextureRecord(
+            addr=addr,
+            phys=phys,
+            seg_num=seg_num,
+            offset=offset,
+            name=name,
+            context_prefix=tex_info.context_prefix,
+            is_palette=True,
+            palette_data=current_palette,
+        )
+    ctx.db.set_symbol(addr, name, "Texture")
 
 
 image_handlers: Dict[int, Callable[..., None]] = {
@@ -410,7 +425,25 @@ def set_texture_image(
     if context_prefix:
         name = f"{context_prefix}_{name}"
 
-    return name
+    from rom_database import TextureRecord
+
+    if name not in ctx.db.textures:
+        ctx.db.textures[name] = TextureRecord(
+            addr=segmented_addr,
+            phys=phys,
+            seg_num=seg_num,
+            offset=offset_from_segment_addr(segmented_addr),
+            fmt=fmt,
+            siz=siz,
+            width=width,
+            name=name,
+            context_prefix=context_prefix,
+        )
+
+    rec = ctx.db.textures[name]
+    ctx.db.set_symbol(segmented_addr, name, "Texture")
+
+    return rec
 
 
 def load_block(
@@ -568,7 +601,6 @@ def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
         if segment_data is not None:
             current_phys = segmented_to_virtual(source.addr)
             if current_phys != phys:
-                key = (name, phys, current_phys)
                 segment_data = None
 
         # Create or update TextureRecord

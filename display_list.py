@@ -273,7 +273,16 @@ class DisplayListProcessor(BaseProcessor):
                     effect["tile"], effect["uls"], effect["ult"], effect["lrs"], effect["lrt"]
                 )
             elif etype == "load_tlut":
-                load_tlut(sTxt, effect["count"], 0, None)
+                tex_info = None
+                if "addr" in effect:
+                    from texture import TextureInfo
+
+                    tex_info = TextureInfo(
+                        addr=effect["addr"],
+                        phys=effect.get("phys", 0),
+                        context_prefix=effect.get("context_prefix"),
+                    )
+                load_tlut(sTxt, effect["count"], 0, tex_info)
             elif etype == "commit_textures":
                 commit_textures(sTxt, effect["pos"], effect["tiles"])
             elif etype == "display_list":

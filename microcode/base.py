@@ -384,11 +384,16 @@ class Microcode(ABC):
         count = self._SHIFTR(cmd1, 14, 10)
         tile_name = G_TX_MAP.get(tile_val, str(tile_val))
         if dis:
+            from texture import current_texture_info
+
             real_count = count + 1
             dis.side_effects.append(
                 {
                     "type": "load_tlut",
                     "count": real_count,
+                    "addr": current_texture_info.addr,
+                    "phys": current_texture_info.phys,
+                    "context_prefix": current_texture_info.context_prefix,
                 }
             )
             load_tlut(dis.sTxt, real_count, 0, None)
