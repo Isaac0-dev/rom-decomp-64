@@ -548,6 +548,8 @@ def generate_hashes():
     include_dir = sm64_root / "include"
     behavior_dir = sm64_root / "data" / "behavior_data.c"
 
+    mop_behavior_dir = repo_root / "mop-ex-alo" / "behaviors.inc.c"
+
     global FIELD_NAME_TO_INDEX
     FIELD_NAME_TO_INDEX = load_object_field_indices(include_dir / "object_fields.h")
 
@@ -562,6 +564,7 @@ def generate_hashes():
     )
 
     txt = behavior_dir.read_text(encoding="utf-8")
+    txt += mop_behavior_dir.read_text(encoding="utf-8")
 
     # remove C comments
     txt = re.sub(r"/\*.*?\*/", "", txt, flags=re.S)
