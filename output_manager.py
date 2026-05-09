@@ -26,19 +26,6 @@ class OutputManager:
     def __init__(self, base_path, internal_name):
         self.base_path = base_path
 
-        # Create a log file for the console output
-        self.console_log_path = os.path.join(base_path, "console.log")
-        self.console_log_file = open(self.console_log_path, "w", buffering=1)
-        self.original_stdout = sys.stdout
-        self.original_stderr = sys.stderr
-
-        # Redirect both stdout and stderr to both terminal and log file
-        sys.stdout = Tee(self.original_stdout, self.console_log_file)
-        sys.stderr = Tee(self.original_stderr, self.console_log_file)
-
-        self.raw_log_path = os.path.join(base_path, "raw.log")
-        self.raw_log_file = open(self.raw_log_path, "w")
-
         self.lua_file = open(os.path.join(base_path, "main.lua"), "w")
         self.lua_file.write(
             f"-- name: {internal_name}\n-- description: Extracted with rom-decomp-64.\n-- incompatible: romhack\n"
@@ -207,9 +194,6 @@ class OutputManager:
                 f.write(content.getbuffer())
             elif isinstance(content, (bytes, bytearray, memoryview)):
                 f.write(content)
-            else:
-                self.raw_log_file.write(f"// written to {filepath}\n" + content)
-                f.write(content.encode("utf-8"))
 
     def write_lua(self, content: list[str], file: str):
         with self.lock:
@@ -312,11 +296,6 @@ class OutputManager:
                 sys.stdout = self.original_stdout
             if hasattr(self, "original_stderr"):
                 sys.stderr = self.original_stderr
-
-            if self.console_log_file:
-                self.console_log_file.close()
-            if self.raw_log_file:
-                self.raw_log_file.close()
             if self.lua_file:
                 self.lua_file.close()
 

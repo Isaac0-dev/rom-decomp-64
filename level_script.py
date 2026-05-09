@@ -425,9 +425,6 @@ def init_level_script_parsing(rom, txt):
 
     # Load segment 0 so that physical addresses can be followed;
     # loading it here prevents it from being popped later.
-    # todo in original game, segment 0 is loaded with an offset of 0x80000000
-    # That might be the correct logic here
-    # set_segment_base_addr(0, (void *) 0x80000000);
     if where_is_segment_loaded(0) is None:
         load_segment(0x00, 0, len(rom), False)
 

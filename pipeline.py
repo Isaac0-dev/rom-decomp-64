@@ -77,11 +77,6 @@ class ExtractionPipeline:
         self.pass_level_scripts()  # parse entry scripts
         # self.pass_trajectory_scan()  # Disabled for debug purposes
 
-        # Refinement passes — operate on the fully-populated db
-        self.pass_refine_behaviors()
-        self.pass_refine_models()
-        self.pass_refine_warps()
-
         # Using water boxes found in collision data, find movtex data
         from movtex import movtex_extractor
 
@@ -681,8 +676,6 @@ class ExtractionPipeline:
         # Optimize models
         run_model_optimization_passes(self.db)
 
-        # Optimize level scripts
-
         # Identify all scripts that are actually referenced by a command
         referenced_scripts = set()
         for s in self.db.level_scripts.values():
@@ -731,119 +724,6 @@ class ExtractionPipeline:
                     continue
 
                 i += 1
-
-    # ------------------------------------------------------------------
-    # Refinement Pass A: Behavior resolution
-    # ------------------------------------------------------------------
-
-    def pass_refine_behaviors(self) -> None:
-        """
-        Ensure all objects have a beh_name that matches the recorded BehaviorRecord
-        if they share the same address. This handles cases where a behavior was
-        identified in one script but used (unidentified) in another.
-        """
-        for level in self.db.levels.values():
-            for area in level.areas.values():
-                for obj in area.objects:
-                    if not obj.beh_addr:
-                        continue
-
-                    # Fallback logic: check all possible behavior records for this address
-                    for key, beh_rec in self.db.behaviors.items():
-                        if key[0] == obj.beh_addr:
-                            if beh_rec.beh_name and not obj.beh_name:
-                                obj.beh_name = beh_rec.beh_name
-                            elif (
-                                beh_rec.beh_name
-                                and obj.beh_name
-                                and ("0x" in obj.beh_name or "bhv_unknown" in obj.beh_name)
-                            ):
-                                obj.beh_name = beh_rec.beh_name
-                            break
-
-    # ------------------------------------------------------------------
-    # Refinement Pass B: Model ID cross-referencing
-    # ------------------------------------------------------------------
-
-    def pass_refine_models(self) -> None:
-        """
-        For every ObjectRecord in every area of every level, attempt to
-        improve model_id resolution using the level's model table and
-        global assets.
-        """
-        from model_ids import MODEL_ID_BY_VALUE
-
-        for level in self.db.levels.values():
-            # First, try to fill in missing names in the level's model table
-            # using global records discovered during parsing.
-            for model_rec in level.models.values():
-                if model_rec.geo_addr and not model_rec.geo_name:
-                    for key, geo_rec in self.db.geos.items():
-                        if key[0] == model_rec.geo_addr:
-                            model_rec.geo_name = geo_rec.name
-                            break
-
-                if model_rec.dl_addr and not model_rec.dl_name:
-                    for key, dl_rec in self.db.display_lists.items():
-                        if key[0] == model_rec.dl_addr:
-                            model_rec.dl_name = dl_rec.name
-                            break
-
-            # Now refine individual object model names
-            for area in level.areas.values():
-                for obj in area.objects:
-                    if obj.refined_model_name:
-                        continue  # already refined by a per-script pass
-
-                    candidates = MODEL_ID_BY_VALUE.get(obj.model_id, [])
-                    if not candidates:
-                        continue
-
-                    # If only one candidate exists, it's trivial
-                    if len(candidates) == 1:
-                        obj.refined_model_name = candidates[0]
-                        continue
-
-                    # Look up the model record in this level's model table
-                    obj_model_rec = level.models.get(obj.model_id)
-                    if obj_model_rec is None or not obj_model_rec.geo_name:
-                        continue
-
-                    geo_lower = (
-                        obj_model_rec.geo_name.lower().replace("_geo", "").replace("geo_", "")
-                    )
-                    for c in candidates:
-                        short = c[6:].lower() if c.startswith("MODEL_") else c.lower()
-                        if short in geo_lower or geo_lower in short:
-                            obj.refined_model_name = c
-                            break
-
-    # ------------------------------------------------------------------
-    # Refinement Pass C: Warp target resolution
-    # ------------------------------------------------------------------
-
-    def pass_refine_warps(self) -> None:
-        """
-        Replace raw numeric warp-target level IDs with known level name
-        strings now that all levels have been parsed.
-
-        Warp dicts stored in AreaRecord.warps use key "dest_level_id" (int).
-        After this pass, a "dest_level_name" key is added where a match exists.
-        """
-        from utils import level_name_to_int
-
-        # Build a reverse map: level_id (int) -> level_name (str)
-        id_to_name: dict[int, str] = {}
-        for name, level_id in level_name_to_int.items():
-            if isinstance(level_id, int):
-                id_to_name[level_id] = name
-
-        for level in self.db.levels.values():
-            for area in level.areas.values():
-                for warp in area.warps:
-                    dest_id = warp.get("dest_level_id")
-                    if dest_id is not None and dest_id in id_to_name:
-                        warp["dest_level_name"] = id_to_name[dest_id]
 
     # ------------------------------------------------------------------
     # Pass 7: Serialization
