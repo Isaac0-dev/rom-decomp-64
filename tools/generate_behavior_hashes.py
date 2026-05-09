@@ -531,11 +531,7 @@ def structural_hash_from_c_source(block_text, constants: dict[str, int]):
     return commands, func_names
 
 
-def generate_hashes(src_path: Path):
-    if not src_path.exists():
-        print(f"Source file not found: {src_path}", file=sys.stderr)
-        return
-
+def generate_hashes():
     repo_root = Path(__file__).resolve().parents[2]
     import os
 
@@ -544,7 +540,13 @@ def generate_hashes(src_path: Path):
         sm64_root = Path(env_root)
     else:
         sm64_root = repo_root / "sm64"
+        if not sm64_root.exists():
+            sm64_root = repo_root / "Link to sm64"
+            if not sm64_root.exists():
+                print("don't know where sm64 source root is")
+                return
     include_dir = sm64_root / "include"
+    behavior_dir = sm64_root / "data" / "behavior_data.c"
 
     global FIELD_NAME_TO_INDEX
     FIELD_NAME_TO_INDEX = load_object_field_indices(include_dir / "object_fields.h")
@@ -559,7 +561,7 @@ def generate_hashes(src_path: Path):
         ]
     )
 
-    txt = src_path.read_text(encoding="utf-8")
+    txt = behavior_dir.read_text(encoding="utf-8")
 
     # remove C comments
     txt = re.sub(r"/\*.*?\*/", "", txt, flags=re.S)
@@ -570,7 +572,7 @@ def generate_hashes(src_path: Path):
 
     hashes: dict[str, list[str]] = {}
 
-    print(f"Found {len(matches)} scripts in {src_path}", file=sys.stderr)
+    print(f"Found {len(matches)} scripts in {behavior_dir}", file=sys.stderr)
 
     for m in matches:
         name = m.group(1)
@@ -632,7 +634,7 @@ def generate_hashes(src_path: Path):
         )
         add_hash(h_anon, name)
 
-        print(f"{name}: {h_precise} (precise), {h_fuzzy} (fuzzy), {h_anon} (anon)")
+        print(f"{name}: {h_precise} (precise), {h_fuzzy} (fuzzy), {h_anon} (anon)", file=sys.stderr)
 
         # Also generate fuzzy variants for romhack tolerance (one UNKNOWN at a time)
         if func_names_list and any(fn is not None for fn in func_names_list):
@@ -667,8 +669,4 @@ def generate_hashes(src_path: Path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: ./generate_behavior_hashes.py <path_to_behavior_data.c>")
-        sys.exit(1)
-
-    generate_hashes(Path(sys.argv[1]))
+    generate_hashes()
