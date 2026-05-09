@@ -153,13 +153,29 @@ def download_and_patch(url):
         return output_rom
 
     search_queries = [slug, slug.replace("-", " ")]
+
+    # Try to get the real title from the page to improve search accuracy
+    try:
+        page_response = requests_typed.get(url, timeout=10)
+        if page_response.status_code == 200:
+            title_match = re.search(
+                r'<meta property="og:title" content="([^"]+)"', page_response.text
+            )
+            if title_match:
+                real_title = title_match.group(1)
+                debug_print(f"Extracted title from page: {real_title}")
+                if real_title not in search_queries:
+                    search_queries.insert(0, real_title)
+    except Exception as e:
+        debug_print(f"Warning: Could not fetch page to extract title: {e}")
+
     if "-" in slug:
         search_queries.extend(slug.split("-"))
 
     selected_hack = None
     seen_queries = set()
     for query in search_queries:
-        if not query or len(query) < 3 or query in seen_queries:
+        if not query or query in seen_queries:
             continue
         seen_queries.add(query)
 
