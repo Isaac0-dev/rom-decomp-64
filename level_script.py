@@ -15,7 +15,6 @@ from utils import (
     set_rom,
     debug_print,
     debug_fail,
-    is_debug_mode,
 )
 from script_definitions import GLOBAL_SCRIPT_SIGNATURES
 from base_processor import BaseProcessor

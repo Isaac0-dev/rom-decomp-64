@@ -170,16 +170,7 @@ class ExtractionPipeline:
         offset = 0x1201FF8  # This address has the version info
         if len(rom_data) > offset + 8:
             data = rom_data[offset : offset + 8]
-            dev_info = struct.unpack(">I", data[0:4])[0]
             major, minor, build, revision = struct.unpack("BBBB", data[4:8])
-
-            # Development info
-            if dev_info != 0x1010101:
-                dev_stage = dev_info >> 24
-                dev_build = dev_info & 0xFFFFFF
-            else:
-                dev_stage = 3
-                dev_build = 0
 
             version = f"v{major}.{minor}"
             if build > 0:

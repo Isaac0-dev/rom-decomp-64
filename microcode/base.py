@@ -22,7 +22,7 @@ from texture import (
     commit_textures,
 )
 from context import LevelAreaContext
-from rom_database import CommandIR, GeoRecord, RomDatabase
+from rom_database import CommandIR, RomDatabase
 
 
 class Microcode(ABC):
