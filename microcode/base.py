@@ -1,4 +1,5 @@
 from abc import ABC
+import struct
 from gbi_defines import (
     G_IM_FMT_MAP,
     G_IM_SIZ_MAP,
@@ -10,7 +11,7 @@ from gbi_defines import (
     G_TX_MAP,
     G_TX_MIRROR,
 )
-from utils import debug_print
+from utils import debug_mode_prefix, debug_print
 from texture import (
     load_block,
     load_tile,
@@ -21,7 +22,7 @@ from texture import (
     commit_textures,
 )
 from context import LevelAreaContext
-from rom_database import CommandIR, RomDatabase
+from rom_database import CommandIR, GeoRecord, RomDatabase
 
 
 class Microcode(ABC):
@@ -67,6 +68,10 @@ class Microcode(ABC):
         from rom_database import VertexRecord, TextureRecord, LightRecord, DisplayListRecord
 
         c = "// " if gfx_cmd.commented_out else ""
+        prefix = "    "
+
+        # Hex dump of the command bytes
+        prefix = debug_mode_prefix(struct.pack("<II", gfx_cmd.w0, gfx_cmd.w1), prefix, 0)
 
         if cmd.name == "gsSP4Triangles":
             # we need to convert this into 2 gsSP2Triangles commands
@@ -78,8 +83,11 @@ class Microcode(ABC):
             def i2p(indices):
                 return ", ".join([str(i) for i in indices])[:-2]
 
-            return f"    {c}gsSP2Triangles({i2p(cmd1)})\n    {c}gsSP2Triangles({i2p(cmd2)})"
-        if cmd.name == "gsSPLight":
+            # todo the debug prefix should differ here for the second cmd
+            return (
+                f"{prefix}{c}gsSP2Triangles({i2p(cmd1)}),\n{prefix}{c}gsSP2Triangles({i2p(cmd2)}),"
+            )
+        elif cmd.name == "gsSPLight":
             from lights import vb_type_name_to_extension
 
             params = gfx_cmd.params
@@ -87,7 +95,7 @@ class Microcode(ABC):
             idx = params.get("idx")
             ext = vb_type_name_to_extension(light.type_name, idx - 1)
 
-            return f"    {c}gsSPLight(/* light */ &{light.name}{ext}, /* idx */ {idx})"
+            return f"{prefix}{c}gsSPLight(/* light */ &{light.name}{ext}, /* idx */ {idx}),"
         else:
             params_str = ""
             for k, v in gfx_cmd.params.items():
@@ -110,9 +118,10 @@ class Microcode(ABC):
                         f"While looking at {cmd.name} found unknown parameter type {type(v)} for {k} ... {v}"
                     )
 
+        # Remove trailing comma and space
         params_str = params_str[:-2]
 
-        return f"    {c}{cmd.name}({params_str})"
+        return f"{prefix}{c}{cmd.name}({params_str}),"
 
     # Common RDP Commands
     def execute_dp_set_texture_image(self, cmd0, cmd1, dis):

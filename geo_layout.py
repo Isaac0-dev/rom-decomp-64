@@ -5,7 +5,7 @@ from utils import (
     CMD_HHHHHH_unpack_s,
     to_signed16,
     debug_print,
-    is_debug_mode,
+    debug_mode_prefix,
 )
 from typing import Any, Dict, List, Optional, Tuple
 from context import ctx
@@ -408,13 +408,11 @@ class GeoProcessor(BaseProcessor):
             prefix = "    " * (ir.indent + 1)
 
             # Hex dump of the command bytes
-            if is_debug_mode():
-                hex_words = [
-                    ir.raw_data[i : i + 4].hex().upper() for i in range(0, len(ir.raw_data), 4)
-                ]
-                bytes_comment = f"/* {' '.join(hex_words)} */ "
-                chars = (5 * (8 + 1)) + 2 + 4  # 5 words, 2 spaces and 4 special chars
-                prefix = bytes_comment + (" " * int((chars - len(bytes_comment)) + 4)) + prefix
+            prefix = debug_mode_prefix(
+                ir.raw_data,
+                prefix,
+                (5 * (8 + 1)) + 2 + 4,  # 5 words, 2 spaces and 4 special chars
+            )
 
             params_str = ", ".join(map(str, ir.params))
             output += f"{prefix}{ir.name}({params_str}),\n"

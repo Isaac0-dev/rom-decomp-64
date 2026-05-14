@@ -419,7 +419,6 @@ def set_texture_image(
     current_texture_info.height = 0
     current_texture_info.context_prefix = context_prefix
 
-
     name = f"texture_{segmented_addr:08X}_{phys:08X}_seg{seg_num}"
     if context_prefix:
         name = f"{context_prefix}_{name}"
@@ -547,7 +546,9 @@ def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
     global current_texture_info
 
     # Process tiles in order of most recently configured
-    sorted_tile_indices = sorted(tile_indices, key=lambda i: (current_texture_info.tiles[i].config_pos, -i))
+    sorted_tile_indices = sorted(
+        tile_indices, key=lambda i: (current_texture_info.tiles[i].config_pos, -i)
+    )
 
     for tile_idx in sorted_tile_indices:
         if not (0 <= tile_idx < 8):

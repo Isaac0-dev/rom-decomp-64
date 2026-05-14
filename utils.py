@@ -41,6 +41,14 @@ def is_debugger() -> bool:
     return "debugpy" in sys.modules
 
 
+def debug_mode_prefix(raw_data: bytes, prefix: str, chars: int, metadata: str = "") -> str:
+    if is_debug_mode():
+        hex_words = [raw_data[i : i + 4].hex().upper() for i in range(0, len(raw_data), 4)]
+        bytes_comment = f"/* {f'{metadata} :: ' if metadata else ''}{' '.join(hex_words)} */ "
+        prefix = bytes_comment + (" " * int((chars - len(bytes_comment)) + 4)) + prefix
+    return prefix
+
+
 vanilla_rom = None
 vanilla_rom_path = None
 

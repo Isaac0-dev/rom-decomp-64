@@ -98,7 +98,11 @@ def _decode_editor_scroll(beh_name, posX, posY, posZ, behParam, force_type=None)
 def _find_scroll_vtxs(addr, level_name, expected_num_verts):
     vp = vertices.get_vertex_processor()
     if not vp.parsed_vertices or expected_num_verts <= 0:
-        return None, 0, f"no parsed vertices: {vp.parsed_vertices} expected_num_verts: {expected_num_verts}"
+        return (
+            None,
+            0,
+            f"no parsed vertices: {vp.parsed_vertices} expected_num_verts: {expected_num_verts}",
+        )
 
     seg_num = segment_from_addr(addr)
     current_seg_load = where_is_segment_loaded(seg_num)
@@ -143,8 +147,7 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
 
     if collected_verts != expected_num_verts:
         return (
-            vtx_buffers
-            if vtx_buffers else None,
+            vtx_buffers if vtx_buffers else None,
             collected_verts,
             f"did not collect enough vertices, got {collected_verts} expected {expected_num_verts}, "
             f"vtx_list: {len(vtx_list)}, but we got {len(vtx_buffers)}, "

@@ -373,7 +373,9 @@ class GBI1(Microcode):
                     h = 64
 
                 # Store dimensions for texture extraction
-                set_tile_size(dis.current_pos, tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2, overwrite=False)
+                set_tile_size(
+                    dis.current_pos, tile_val, 0, 0, (w - 1) << 2, (h - 1) << 2, overwrite=False
+                )
 
             dis.set_cmd(
                 "gsSPTexture",

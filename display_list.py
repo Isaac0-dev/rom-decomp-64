@@ -246,7 +246,13 @@ class DisplayListProcessor(BaseProcessor):
                     phys_override=effect.get("phys"),
                 )
             elif etype == "set_tile":
-                set_tile_format(effect.get("pos", 0), effect["tile"], effect["fmt"], effect["siz"], effect.get("tmem", 0))
+                set_tile_format(
+                    effect.get("pos", 0),
+                    effect["tile"],
+                    effect["fmt"],
+                    effect["siz"],
+                    effect.get("tmem", 0),
+                )
             elif etype == "load_block":
                 load_block(
                     sTxt,
@@ -270,7 +276,12 @@ class DisplayListProcessor(BaseProcessor):
                 )
             elif etype == "set_tile_size":
                 set_tile_size(
-                    effect.get("pos", 0), effect["tile"], effect["uls"], effect["ult"], effect["lrs"], effect["lrt"]
+                    effect.get("pos", 0),
+                    effect["tile"],
+                    effect["uls"],
+                    effect["ult"],
+                    effect["lrs"],
+                    effect["lrt"],
                 )
             elif etype == "load_tlut":
                 tex_info = None

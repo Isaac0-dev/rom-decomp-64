@@ -9,6 +9,7 @@ from segment import (
     segment_from_addr,
 )
 from utils import (
+    debug_mode_prefix,
     level_name_to_int_lookup,
     read_int,
     set_rom,
@@ -233,15 +234,12 @@ class LevelScriptProcessor(BaseProcessor):
             comment = ir.comment if hasattr(ir, "comment") else ""
 
             # Hex dump of the command bytes
-            if is_debug_mode():
-                hex_words = [
-                    ir.raw_data[i : i + 4].hex().upper() for i in range(0, len(ir.raw_data), 4)
-                ]
-                bytes_comment = f"/* 0x{ir.address:08X} :: {' '.join(hex_words)} */ "
-                chars = (
-                    ((0x18 // 4) * (8 + 1)) + 2 + 4 + (5 + 8)
-                )  # 6 words, 2 spaces and 4 special chars
-                prefix = bytes_comment + (" " * int((chars - len(bytes_comment)) + 4)) + prefix
+            prefix = debug_mode_prefix(
+                ir.raw_data,
+                prefix,
+                ((0x18 // 4) * (8 + 1)) + 2 + 4 + (5 + 8),  # 6 words, 2 spaces and 4 special chars
+                metadata=f"0x{ir.address:08X}",
+            )
 
             params_str = ", ".join(_param_to_str(p) for p in ir.params)
             output += f"{prefix}{comment}{ir.name}({params_str}),\n"

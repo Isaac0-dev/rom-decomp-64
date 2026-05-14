@@ -291,7 +291,7 @@ def serialize_gfx_layout(
     ucode = create_microcode(microcode_name)
     lines = [f"const Gfx {dl_name}[] = {{"]
     for cmd in commands:
-        lines.append(ucode.serialize_command(cmd, db, location) + ",")
+        lines.append(ucode.serialize_command(cmd, db, location))
     lines.append("};")
     return "\n".join(lines)
 
