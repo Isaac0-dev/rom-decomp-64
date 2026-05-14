@@ -634,7 +634,10 @@ def LOAD_MODEL_FROM_DL(values):
     )
 
     formatted_output = format_output("LOAD_MODEL_FROM_DL", params)
+
+    # coop doesn't resolve the dls at all
     formatted_output.comment = "// "
+
     return formatted_output
 
 
@@ -648,8 +651,6 @@ def LOAD_MODEL_FROM_GEO(values):
 
     comment = ""
     seg_num = segment_from_addr(geo)
-    if seg_num == 0x12:
-        comment = "// "
 
     from model_ids import resolve_model_id
 
