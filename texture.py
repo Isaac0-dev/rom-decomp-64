@@ -785,9 +785,7 @@ def convert_skybox_to_c(image, skybox_name, txt):
             c_output.append(f"    {skybox_name}_skybox_texture_{idx:05X},\n")
     c_output.append("};\n\n")
 
-    # Write to output
-    c_code = "".join(c_output)
-    txt.write(ctx, "skybox_tiles", f"{skybox_name}_tiles_c", c_code)
+    return "".join(c_output)
 
 
 # ---------------------------------------------------------------------------
@@ -963,9 +961,7 @@ class SkyboxProcessor(BaseProcessor):
             self.txt.write(ctx, "skybox_texture", f"{level_prefix}_skybox_texture", buffer)
 
         # Build tiles + C code synchronously (can be threaded if slow)
-        convert_skybox_to_c(final_image, level_prefix, self.txt)
-
-        return ""
+        return convert_skybox_to_c(final_image, level_prefix, self.txt)
 
 
 _skybox_processor: Optional[SkyboxProcessor] = None
