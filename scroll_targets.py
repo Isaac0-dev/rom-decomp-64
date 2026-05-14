@@ -98,12 +98,12 @@ def _decode_editor_scroll(beh_name, posX, posY, posZ, behParam, force_type=None)
 def _find_scroll_vtxs(addr, level_name, expected_num_verts):
     vp = vertices.get_vertex_processor()
     if not vp.parsed_vertices or expected_num_verts <= 0:
-        return None
+        return None, 0, f"no parsed vertices: {vp.parsed_vertices} expected_num_verts: {expected_num_verts}"
 
     seg_num = segment_from_addr(addr)
     current_seg_load = where_is_segment_loaded(seg_num)
     if current_seg_load is None:
-        return None
+        return None, 0, f"segment not loaded: {seg_num}"
     cur_start, cur_end = current_seg_load
 
     SPAN_BEGIN = addr
@@ -114,7 +114,7 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
 
     vtx_list = vp.parsed_vertices_by_segment.get(cur_start, [])
     if not vtx_list:
-        return None
+        return None, 0, f"no parsed vertices for segment {seg_num} at {cur_start:08X}"
 
     for (seg_addr, count, start, end, parent_dl), (name, actual_count) in sorted(
         vtx_list, key=lambda x: x[0][0]
@@ -123,7 +123,7 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
         buf_begin = seg_addr
         buf_end = seg_addr + actual_count * 0x10
 
-        if buf_end <= SPAN_BEGIN or buf_begin >= SPAN_END:
+        if buf_end < SPAN_BEGIN or buf_begin > SPAN_END:
             continue
 
         overlap_begin = max(buf_begin, SPAN_BEGIN)
@@ -142,9 +142,16 @@ def _find_scroll_vtxs(addr, level_name, expected_num_verts):
             break
 
     if collected_verts != expected_num_verts:
-        return vtx_buffers if vtx_buffers else None, collected_verts
+        return (
+            vtx_buffers
+            if vtx_buffers else None,
+            collected_verts,
+            f"did not collect enough vertices, got {collected_verts} expected {expected_num_verts}, "
+            f"vtx_list: {len(vtx_list)}, but we got {len(vtx_buffers)}, "
+            f"span {SPAN_BEGIN:08X}-{SPAN_END:08X}",
+        )
 
-    return vtx_buffers, collected_verts
+    return vtx_buffers, collected_verts, "success"
 
 
 def register_scroll_target(
@@ -193,11 +200,11 @@ def register_scroll_target(
         )
         return None
 
-    vtx_buffers, collected_verts = _find_scroll_vtxs(addr, level_name, num_verts)
+    vtx_buffers, collected_verts, reason = _find_scroll_vtxs(addr, level_name, num_verts)
     if vtx_buffers is None or len(vtx_buffers) == 0:
-        name = vertices.parse_vertices(addr, num_verts, txt, f"{level_name}_scroll")
-        if name != "NULL":
-            vtx_buffers, collected_verts = _find_scroll_vtxs(addr, level_name, num_verts)
+        vtx_record = vertices.parse_vertices(addr, num_verts, txt, f"{level_name}_scroll")
+        if vtx_record is not None:
+            vtx_buffers, collected_verts, reason = _find_scroll_vtxs(addr, level_name, num_verts)
         if vtx_buffers is None or len(vtx_buffers) == 0:
             debug_print(
                 f"Could not find vertex buffer for scroll target {beh_name} at address 0x{addr:08X} for level {level_name} "
@@ -207,6 +214,7 @@ def register_scroll_target(
                 f"behParam=0x{behParam_u:08X} -> "
                 f"addr=0x{addr:08X} (raw 0x{raw_addr:08X}) "
                 f"axis={axis} type={stype} numVerts={num_verts} speed={speed} cycle={cycle} "
+                f"reason: {reason}"
             )
             return None
         else:

@@ -121,7 +121,15 @@ def EXECUTE(values):
         format_param_hex("end", end, 4),
         entry_name,
     ]
-    return format_output("EXECUTE", params)
+
+    ret = format_output("EXECUTE", params)
+
+    # Don't expect EXECUTE commands to be found in the middle of an area.
+    # This is known to cause crashes and such like.
+    if ctx.curr_area != -1:
+        ret.comment = "// "
+
+    return ret
 
 
 def EXIT_AND_EXECUTE(values):
