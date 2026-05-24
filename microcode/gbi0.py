@@ -88,7 +88,7 @@ class GBI0(GBI1):
         vtx = self._SHIFTR(cmd0, 16, 8)
         where = self._SHIFTR(cmd0, 12, 4)
         if dis:
-            dis.set_cmd("gsSPModifyVertex", {"vtx": vtx, "where": where, "val": cmd1})
+            dis.set_cmd("gsSPModifyVertex", {"vtx": vtx, "where": where, "val": cmd1}, commented_out=True)
 
 
 class F3DEX_GBI0(GBI1):

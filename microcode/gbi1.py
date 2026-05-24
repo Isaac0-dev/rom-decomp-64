@@ -279,7 +279,7 @@ class GBI1(Microcode):
         where = self._SHIFTR(cmd0, 0, 16)
         val = cmd1
         if dis:
-            dis.set_cmd("gsSPModifyVertex", {"vtx": vtx, "where": where, "val": val})
+            dis.set_cmd("gsSPModifyVertex", {"vtx": vtx, "where": where, "val": val}, commented_out=True)
 
     def execute_rdp_half_2(self, cmd0, cmd1, dis):
         if dis:
