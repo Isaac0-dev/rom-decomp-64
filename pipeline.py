@@ -127,7 +127,6 @@ class ExtractionPipeline:
 
         # Detect and normalise endianness
         first_two = rom_data[:2]
-
         if first_two[0] == 0x80 and first_two[1] == 0x37:
             endian = ROM_Endian.BIG
         elif first_two[0] == 0x37 and first_two[1] == 0x80:
@@ -141,8 +140,9 @@ class ExtractionPipeline:
 
             debug_fail(f"Unknown ROM endianness: {hex(first_two[0])} {hex(first_two[1])}")
             endian = ROM_Endian.BIG  # unreachable, debug_fail raises
+        rom_data = bytes(rom_data)
 
-        self.rom = CustomBytesIO(bytes(rom_data))
+        self.rom = CustomBytesIO(rom_data)
         set_rom(self.rom)
 
         internal_name = get_internal_name(rom_data)
