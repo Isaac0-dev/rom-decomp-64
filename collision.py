@@ -237,7 +237,10 @@ def _parse_vertices(
 
 
 def looks_like_next_cmd(val: int) -> bool:
-    return val in COLLISION_COMMANDS or val < 0x40 or val >= 0x65
+    is_cmd = val in COLLISION_COMMANDS or val < 0x40 or val >= 0x65
+    if not is_cmd:
+        debug_print(f"DEBUG: looks_like_next_cmd rejected 0x{val:02X}")
+    return is_cmd
 
 
 def _parse_triangles(rom: CustomBytesIO) -> Tuple[List[CommandIR], int]:
@@ -358,11 +361,12 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
     total_surfaces = 0
     x_coords = []
     z_coords = []
-    try:
-        cmd = rom.read_u16()
-    except EOFError:
+    if len(rom) - rom.tell() < 2:
+        debug_print(f"Error, collision data is smaller than 2 bytes: {len(rom) - rom.tell()}")
         return [], 0
+    cmd = rom.read_u16()
     if cmd != TERRAIN_LOAD_VERTICES:
+        debug_print(f"Error, first word is {cmd:02X} and not TERRAIN_LOAD_VERTICES")
         return [], 0
 
     ir_list.append(CommandIR(0, [], name="COL_INIT"))
