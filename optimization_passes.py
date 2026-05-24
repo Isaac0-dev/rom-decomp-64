@@ -133,8 +133,10 @@ def batch_tri2(commands: List[CommandIR]) -> List[CommandIR]:
 
 
 def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
-    """Remove redundant gsDP state changes."""
+    """Remove redundant gsDP and gsSP state changes."""
     new_cmds = []
+
+    # State tracking
     last_combine_w0 = None
     last_combine_w1 = None
     last_env_color = None
@@ -144,74 +146,170 @@ def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
     last_render_mode = None
     last_other_mode_l = None
     last_other_mode_h = None
+    last_geometry_mode = None
+    last_texture_w0 = None
+    last_texture_w1 = None
+    last_fog_factor = None
 
     # We reset state tracking on jump/branch list or end dl to be safe
-    reset_opcodes = {0x06, 0xB8}  # GS_DISPLAY_LIST, GS_END_DL
+    # Also reset on Matrix and MoveMem as they can have complex side effects
+    reset_opcodes = {0x06, 0xDE, 0xB8, 0xDF, 0x01, 0xDA, 0x03, 0xDC}
 
     for cmd in commands:
         if cmd.opcode in reset_opcodes:
-            last_combine_w0 = None
-            last_combine_w1 = None
-            last_env_color = None
-            last_prim_color = None
-            last_fog_color = None
-            last_blend_color = None
-            last_render_mode = None
-            last_other_mode_l = None
-            last_other_mode_h = None
+            last_combine_w0 = last_combine_w1 = None
+            last_env_color = last_prim_color = last_fog_color = last_blend_color = None
+            last_render_mode = last_other_mode_l = last_other_mode_h = None
+            last_geometry_mode = last_texture_w0 = last_texture_w1 = None
+            last_fog_factor = None
             new_cmds.append(cmd)
             continue
 
         w0 = cmd.params[0].w0
         w1 = cmd.params[0].w1
 
-        if cmd.name == "gsDPSetCombineMode":
+        # Combine Mode
+        if cmd.name == "gsDPSetCombineMode" or cmd.opcode == 0xFC:
             if w0 == last_combine_w0 and w1 == last_combine_w1:
                 continue
-            last_combine_w0 = w0
-            last_combine_w1 = w1
+            last_combine_w0, last_combine_w1 = w0, w1
 
+        # Colors
         elif cmd.name == "gsDPSetEnvColor":
             if w1 == last_env_color:
                 continue
             last_env_color = w1
-
         elif cmd.name == "gsDPSetPrimColor":
-            # Prim color also has w0 flags (m, l)
-            w0 = w0 & 0xFFFF
-            val = (w0, w1)
+            val = (w0 & 0xFFFF, w1)
             if val == last_prim_color:
                 continue
             last_prim_color = val
-
         elif cmd.name == "gsDPSetFogColor":
             if w1 == last_fog_color:
                 continue
             last_fog_color = w1
-
         elif cmd.name == "gsDPSetBlendColor":
             if w1 == last_blend_color:
                 continue
             last_blend_color = w1
 
-        elif cmd.name == "gsDPSetRenderMode":
-            if w1 == last_render_mode:
+        # Geometry Mode (Additive/Subtractive)
+        elif cmd.name in ("gsSPSetGeometryMode", "gsSPClearGeometryMode", "gsSPGeometryMode"):
+            # If we don't know the current mode, we can't optimize easily yet.
+            # But we can at least avoid exact repeats.
+            val = (cmd.name, w1)
+            if val == last_geometry_mode:
                 continue
-            last_render_mode = w1
+            last_geometry_mode = val
 
-        elif cmd.name == "gsDPSetOtherMode":
-            # G_SETOTHERMODE_L (0xE2) or G_SETOTHERMODE_H (0xE3)
-            if cmd.opcode == 0xE2:
+        # Texture State
+        elif cmd.name == "gsSPTexture" or cmd.opcode in (0xBB, 0xD7):
+            if w0 == last_texture_w0 and w1 == last_texture_w1:
+                continue
+            last_texture_w0, last_texture_w1 = w0, w1
+
+        # Other Modes (L/H)
+        elif cmd.name in ("gsSPSetOtherMode", "gsDPSetOtherMode") or cmd.opcode in (
+            0xB9,
+            0xBA,
+            0xE2,
+            0xE3,
+        ):
+            # Check L or H based on opcode or shift
+            is_l = cmd.opcode in (0xB9, 0xE2)
+            if not is_l and cmd.name == "gsSPSetOtherMode":
+                params = cmd.params[0].params
+                is_l = params.get("cmd") == "G_SETOTHERMODE_L" or params.get("shift", 0) < 0x20
+
+            if is_l:
                 if w1 == last_other_mode_l:
                     continue
                 last_other_mode_l = w1
-            else:  # cmd.opcode == 0xE3
+            else:
                 if w1 == last_other_mode_h:
                     continue
                 last_other_mode_h = w1
 
+        # Fog Factor / MoveWord
+        elif cmd.name in ("gsSPFogFactor", "gsSPFogPosition") or (
+            cmd.opcode in (0xBC, 0xDB) and (w0 & 0xFF) == 0x08
+        ):
+            if w1 == last_fog_factor:
+                continue
+            last_fog_factor = w1
+
         new_cmds.append(cmd)
     return new_cmds
+
+
+def eliminate_redundant_vertices(commands: List[CommandIR]) -> List[CommandIR]:
+    """Remove gsSPVertex commands that are overwritten before they are used."""
+    new_cmds = []
+    needed_vertices = set()
+
+    # Iterate backwards to track vertex usage
+    for cmd in reversed(commands):
+        keep = True
+
+        if cmd.name == "gsSPVertex":
+            params = cmd.params[0].params
+            v0 = params.get("v0", 0)
+            count = params.get("count", 0)
+
+            # Check if any vertex in this range is currently needed
+            v_range = set(range(v0, v0 + count))
+            if not (v_range & needed_vertices):
+                # None of these vertices are needed yet (they are overwritten or unused)
+                keep = False
+            else:
+                # Some are needed. Satisfy them and remove from needed set.
+                needed_vertices -= v_range
+
+        elif cmd.name in ("gsSP1Triangle", "gsSP1Quadrangle", "gsSPLine3D"):
+            params = cmd.params[0].params
+            if "indices" in params:
+                for v in params["indices"]:
+                    needed_vertices.add(v)
+            else:
+                for k in ("v0", "v1", "v2", "v3"):
+                    if k in params:
+                        needed_vertices.add(params[k])
+
+        elif cmd.name == "gsSP2Triangles":
+            params = cmd.params[0].params
+            if "indices" in params:
+                for v in params["indices"]:
+                    needed_vertices.add(v)
+            else:
+                for k in ("v00", "v01", "v02", "v10", "v11", "v12"):
+                    if k in params:
+                        needed_vertices.add(params[k])
+
+        elif cmd.name == "gsSPModifyVertex":
+            params = cmd.params[0].params
+            needed_vertices.add(params.get("vtx", 0))
+
+        elif cmd.name == "gsSPCullDisplayList":
+            params = cmd.params[0].params
+            v0 = params.get("v0", 0)
+            vn = params.get("vn", 0)
+            for v in range(v0, vn + 1):
+                needed_vertices.add(v)
+
+        elif cmd.name == "gsSPBranchLessZ":
+            params = cmd.params[0].params
+            needed_vertices.add(params.get("vtx", 0))
+
+        elif cmd.opcode == 0x06 or cmd.opcode == 0xDE:  # gsSPDisplayList / gsSPBranchList
+            # We must assume the child DL uses all vertices
+            # This is a safe assumption because we don't do cross-DL analysis here
+            for v in range(32):
+                needed_vertices.add(v)
+
+        if keep:
+            new_cmds.append(cmd)
+
+    return list(reversed(new_cmds))
 
 
 def insert_cull_dl(commands: List[CommandIR]) -> List[CommandIR]:
@@ -272,5 +370,6 @@ def run_model_optimization_passes(db: RomDatabase):
         # Order matters
         dl_rec.commands = eliminate_degenerate_triangles(dl_rec.commands)
         dl_rec.commands = eliminate_redundant_rdp_state(dl_rec.commands)
+        dl_rec.commands = eliminate_redundant_vertices(dl_rec.commands)
         dl_rec.commands = batch_tri2(dl_rec.commands)
         dl_rec.commands = insert_cull_dl(dl_rec.commands)
