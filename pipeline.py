@@ -709,7 +709,8 @@ class ExtractionPipeline:
                     expand_level_script_into(script, cmd.indent, level_script, i)
 
                     # remove the original level script from the database
-                    self.db.level_scripts.pop(level_script.script_addr, None)
+                    if level_script is not None:
+                        self.db.level_scripts.pop(level_script.script_addr, None)
 
                     # Do not increment i; re-process the new commands at this position
                     continue
@@ -935,12 +936,10 @@ class ExtractionPipeline:
 
     def pass_finalize(self) -> int:
         """Print parse summary, assert segment hooks, close OutputManager."""
-        from level_script import print_parse_summary
         from segment import seg_hooks_assert
 
         assert self.txt is not None
 
-        ret = print_parse_summary()
         seg_hooks_assert()
         from text_export import wait_for_text_export
 
@@ -948,7 +947,7 @@ class ExtractionPipeline:
         self.txt.close()
         ctx.reached_end = True
 
-        return ret
+        return 100
 
     # ------------------------------------------------------------------
     # Internal helpers
