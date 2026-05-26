@@ -97,7 +97,6 @@
             worker = new Worker('worker.js?v=' + Date.now(), { type: 'module' });
 
             worker.onmessage = (e) => {
-                console.log('[Main] Received message:', e.data);
                 const { type, data, component, state } = e.data;
 
                 if (type === 'worker-loaded') {

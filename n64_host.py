@@ -410,9 +410,11 @@ class N64JSHost:
                             if (o >= 0 && o + 4 <= rom.u8.length) {
                                 const sl = rom.u8.subarray(o, o + 4);
                                 if (compForward.every((b, i) => sl[i] === b) || compBackward.every((b, i) => sl[i] === b)) {
-                                    console.log("[PI DMA] Match found at 0x" + o.toString(16));
-                                    header_found(o, cart);
-                                    globalThis.runMicrocodeDetectionQuiet();
+                                    if (cart >= 0x10400000) {
+                                        console.log("[PI DMA] Match found at 0x" + o.toString(16));
+                                        header_found(o, cart);
+                                        globalThis.runMicrocodeDetectionQuiet();
+                                    }
                                 }
                                 if (len === 0x10) {
                                     const rv = (rom.u8[o]<<8)|rom.u8[o+1];

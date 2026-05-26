@@ -283,12 +283,12 @@ class ExtractionPipeline:
         if IS_BROWSER:
             debug_print("Browser detected, using native N64JS bridge for emulation.")
             host_obj = N64JSHost(os.path.join(current_dir, "n64js", "src"))
-            
+
             with open(self.rom_path, "rb") as f:
                 rom_data = f.read()
-            
+
             host_obj.init_emulator(rom_data, self._compression_type or "MIO0", os.path.basename(self.rom_path))
-            
+
             # Step the emulator until we find what we need or timeout
             start_time = time.time()
             debug_print(f"Starting browser emulation loop. Compression: {self._compression_type or 'MIO0'}")
@@ -299,15 +299,16 @@ class ExtractionPipeline:
                         debug_print("Browser emulation loop finished: compression and microcode detected.")
                         break
                     # Periodically log progress
-                    if int(time.time() - start_time) % 5 == 0:
-                         debug_print(f"Emulation loop running... CompDone: {host_obj.compression_done}, MicroDone: {host_obj.microcode_done}")
+                    elapsed = time.time() - start_time
+                    debug_print(f"Emulation loop running... Time: {elapsed:.1f}s, CompDone: {host_obj.compression_done}, MicroDone: {host_obj.microcode_done}, HeadersFound: {len(host_obj.found_headers)}")
+                    time.sleep(0.5)
                 else:
                     debug_print("Browser emulation loop timed out.")
             except SystemExit:
                 debug_print("Browser emulation loop exited gracefully.")
             except Exception as e:
                 debug_print(f"Browser emulation loop encountered error: {e}")
-            
+
             # Detect microcode via ROM signature scan (no real emulation in browser)
             mc_name = self._detect_microcode_from_rom()
             if mc_name:
@@ -320,23 +321,6 @@ class ExtractionPipeline:
                 debug_print("Browser microcode ROM scan: no match, defaulting to F3DEX2")
                 set_microcode("F3DEX2")
                 self.db.meta.microcode = "F3DEX2"
-            
-            for rom_offset, cart_addr in host_obj.found_headers:
-                debug_print(f"Browser emulation found segment 2 at ROM 0x{rom_offset:08X}")
-                block_size = self._get_compressed_block_size(rom_offset, self._compression_type or "MIO0")
-                rom_end = rom_offset + block_size if block_size > 0 else len(self.rom)
-                load_segment(2, rom_offset, rom_end, True)
-                self.seg2_rom_offset = rom_offset
-
-                self.db.global_segs[2] = GlobalSegRecord(
-                    seg_num=2, rom_offset=rom_offset, rom_end=rom_end
-                )
-
-                from segment2_extractor import get_segment2_processor
-                s2p = get_segment2_processor()
-                s2p.ctx.txt = self.txt
-                s2p.parse(0)
-                break
 
             # Process audio headers found by browser emulation
             if hasattr(host_obj, 'found_alseq_headers') and host_obj.found_alseq_headers:
@@ -351,28 +335,69 @@ class ExtractionPipeline:
                 from audio import extract_sound, get_audio_processor
                 # Pass -1 to trigger auto-detection/signature scan inside extract_sound
                 extract_sound(self.rom, self.txt, self.txt.base_path, -1, -1)
-                
+
                 # Now check if the database got sequences
                 if self.db.audio.sequences:
                     self._alseq_candidates = [1] # Dummy value to trigger processing
                     debug_print("Signature scan found audio sequences.")
-            
+
+            debug_print(f"Segment 2 status: seg2_rom_offset={self.seg2_rom_offset}, found_headers={len(host_obj.found_headers)}")
             # Fallback: search for Segment 2 if not found by emulator
             if not self.seg2_rom_offset:
                 debug_print("Emulator did not find Segment 2, searching via signature...")
-                from utils import find_all_needles_in_haystack
-                # Look for MIO0/Yaz0/etc headers
                 magic = b"MIO0" if self._compression_type == "MIO0" else b"Yaz0"
-                matches = find_all_needles_in_haystack(rom_data, magic)
-                for offset in matches:
-                    # Heuristic: Segment 2 is usually large and contains font data
-                    # For now, just try the first one that looks plausible
-                    if offset > 0x100000: # Skip early small blocks
-                        debug_print(f"Found plausible Segment 2 at 0x{offset:08X}")
-                        load_segment(2, offset, offset + 0x100000, True) # Heuristic size
-                        self.seg2_rom_offset = offset
-                        break
+                # Traditional SM64 layout puts segment 2 at 0x800000, which is
+                # the correct address the real emulator would find via PI DMA.
+                # Try that first.
+                TRADITIONAL_SEG2 = 0x800000
+                if len(rom_data) > TRADITIONAL_SEG2 + 12 and rom_data[TRADITIONAL_SEG2:TRADITIONAL_SEG2 + 4] == magic:
+                    block_size = self._get_compressed_block_size(TRADITIONAL_SEG2, self._compression_type or "MIO0")
+                    if block_size > 0:
+                        decomp_size = struct.unpack(">I", rom_data[TRADITIONAL_SEG2 + 4:TRADITIONAL_SEG2 + 8])[0]
+                        debug_print(f"Using traditional Segment 2 at 0x{TRADITIONAL_SEG2:08X} (decomp={decomp_size}, block={block_size})")
+                        load_segment(2, TRADITIONAL_SEG2, TRADITIONAL_SEG2 + block_size, True)
+                        self.seg2_rom_offset = TRADITIONAL_SEG2
+                        self.db.global_segs[2] = GlobalSegRecord(
+                            seg_num=2, rom_offset=TRADITIONAL_SEG2, rom_end=TRADITIONAL_SEG2 + block_size
+                        )
+                        from segment2_extractor import get_segment2_processor
+                        s2p = get_segment2_processor()
+                        s2p.ctx.txt = self.txt
+                        s2p.parse(0)
+                    else:
+                        debug_print(f"Traditional Segment 2 at 0x{TRADITIONAL_SEG2:08X} exists but decompression failed")
+                if not self.seg2_rom_offset:
+                    # Traditional location not valid — scan all MIO0 matches.
+                    # Segment 2 is the first large block (>= 64KB decompressed).
+                    from utils import find_all_needles_in_haystack
+                    matches = find_all_needles_in_haystack(rom_data, magic)
+                    debug_print(f"Found {len(matches)} MIO0 magic matches, scanning for large blocks")
+                    MIN_SEG2_DECOMP_SIZE = 0x10000
+                    for offset in matches:
+                        if offset == TRADITIONAL_SEG2:
+                            continue
+                        if len(rom_data) < offset + 12:
+                            continue
+                        decomp_size = struct.unpack(">I", rom_data[offset + 4:offset + 8])[0]
+                        if decomp_size < MIN_SEG2_DECOMP_SIZE:
+                            continue
+                        block_size = self._get_compressed_block_size(offset, self._compression_type or "MIO0")
+                        if block_size > 0:
+                            debug_print(f"Selecting Segment 2 at 0x{offset:08X} (decomp={decomp_size}, block={block_size})")
+                            load_segment(2, offset, offset + block_size, True)
+                            self.seg2_rom_offset = offset
+                            self.db.global_segs[2] = GlobalSegRecord(
+                                seg_num=2, rom_offset=offset, rom_end=offset + block_size
+                            )
+                            from segment2_extractor import get_segment2_processor
+                            s2p = get_segment2_processor()
+                            s2p.ctx.txt = self.txt
+                            s2p.parse(0)
+                            break
+                    else:
+                        debug_print("No valid Segment 2 candidates found.")
 
+            # Early exit for browser
             return
 
         # Build emulator command

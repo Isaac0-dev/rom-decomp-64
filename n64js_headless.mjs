@@ -671,14 +671,18 @@ async function main() {
             } else if (isDom1Addr3(cartAddr)) {
                 romOffset = cartAddr - PI_DOM1_ADDR3;
             }
-            if (romOffset >= 0 && romOffset + 4 <= rom.u8.length) {
+            if (romOffset >= 0x400000 && romOffset + 4 <= rom.u8.length) {
                 const slice = rom.u8.subarray(romOffset, romOffset + 4);
                 if (compressionBytes.length <= slice.length && compressionBytes.every((b, i) => slice[i] === b)) {
-                    console.log(`[PI DMA] found ${opts.compressionType} header at ROM 0x${romOffset.toString(16)} cart=0x${cartAddr.toString(16)}`);
+                    // Filter out headers found in the very beginning of the ROM (bootloader/header area)
+                    // and specifically the known false positive 0x108A40
+                    if (cartAddr >= 0x10400000 && romOffset !== 0x108A40) {
+                        console.log(`[PI DMA] found ${opts.compressionType} header at ROM 0x${romOffset.toString(16)} cart=0x${cartAddr.toString(16)}`);
 
-                    runMicrocodeDetectionQuiet();
-                    compressionTaskDone = true;
-                    maybeExit();
+                        runMicrocodeDetectionQuiet();
+                        compressionTaskDone = true;
+                        maybeExit();
+                    }
                 }
 
                 // Check for ALSeqFile header (sequence data)
