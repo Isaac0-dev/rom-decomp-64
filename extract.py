@@ -130,7 +130,11 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
     ctx.reached_end = True
 
     if called_by_main:
+        if browser_bridge.run_in_browser():
+            return exit_code
         sys.exit(0 if exit_code == 0 else 1)
+    
+    return exit_code
 
 
 def download_and_patch(url):

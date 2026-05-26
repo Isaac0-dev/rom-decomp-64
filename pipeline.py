@@ -48,6 +48,7 @@ class ExtractionPipeline:
         self.rom_path = rom_path
         self.output_status = output_status
         self.host = host
+        self.seg2_rom_offset = None
         self.called_by_main = called_by_main
 
         self.db = RomDatabase()
@@ -274,8 +275,105 @@ class ExtractionPipeline:
         from display_list import set_microcode
         from segment import load_segment
         from utils import validator, debug_print
+        from n64_host import N64JSHost, IS_BROWSER
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # If we are in the browser, we use the bridge directly
+        if IS_BROWSER:
+            debug_print("Browser detected, using native N64JS bridge for emulation.")
+            host_obj = N64JSHost(os.path.join(current_dir, "n64js", "src"))
+            
+            with open(self.rom_path, "rb") as f:
+                rom_data = f.read()
+            
+            host_obj.init_emulator(rom_data, self._compression_type or "MIO0", os.path.basename(self.rom_path))
+            
+            # Step the emulator until we find what we need or timeout
+            start_time = time.time()
+            debug_print(f"Starting browser emulation loop. Compression: {self._compression_type or 'MIO0'}")
+            try:
+                while time.time() - start_time < 30.0:
+                    host_obj.step(5_000_000)
+                    if host_obj.compression_done and host_obj.microcode_done:
+                        debug_print("Browser emulation loop finished: compression and microcode detected.")
+                        break
+                    # Periodically log progress
+                    if int(time.time() - start_time) % 5 == 0:
+                         debug_print(f"Emulation loop running... CompDone: {host_obj.compression_done}, MicroDone: {host_obj.microcode_done}")
+                else:
+                    debug_print("Browser emulation loop timed out.")
+            except SystemExit:
+                debug_print("Browser emulation loop exited gracefully.")
+            except Exception as e:
+                debug_print(f"Browser emulation loop encountered error: {e}")
+            
+            # Detect microcode via ROM signature scan (no real emulation in browser)
+            mc_name = self._detect_microcode_from_rom()
+            if mc_name:
+                set_microcode(mc_name)
+                self.db.meta.microcode = mc_name
+                debug_print(f"Browser microcode ROM scan detected: {mc_name}")
+                if mc_name != "F3D":
+                    validator.set_decomp(f"Non-standard microcode (therefore decomp): {mc_name}")
+            else:
+                debug_print("Browser microcode ROM scan: no match, defaulting to F3DEX2")
+                set_microcode("F3DEX2")
+                self.db.meta.microcode = "F3DEX2"
+            
+            for rom_offset, cart_addr in host_obj.found_headers:
+                debug_print(f"Browser emulation found segment 2 at ROM 0x{rom_offset:08X}")
+                block_size = self._get_compressed_block_size(rom_offset, self._compression_type or "MIO0")
+                rom_end = rom_offset + block_size if block_size > 0 else len(self.rom)
+                load_segment(2, rom_offset, rom_end, True)
+                self.seg2_rom_offset = rom_offset
+
+                self.db.global_segs[2] = GlobalSegRecord(
+                    seg_num=2, rom_offset=rom_offset, rom_end=rom_end
+                )
+
+                from segment2_extractor import get_segment2_processor
+                s2p = get_segment2_processor()
+                s2p.ctx.txt = self.txt
+                s2p.parse(0)
+                break
+
+            # Process audio headers found by browser emulation
+            if hasattr(host_obj, 'found_alseq_headers') and host_obj.found_alseq_headers:
+                self._alseq_candidates = host_obj.found_alseq_headers
+                self.db.audio.alseq_candidates = host_obj.found_alseq_headers
+                from audio import get_audio_processor
+                ap = get_audio_processor()
+                for offset in host_obj.found_alseq_headers:
+                    ap.parse(offset)
+            else:
+                debug_print("Emulator did not find audio sequences, attempting signature scan...")
+                from audio import extract_sound, get_audio_processor
+                # Pass -1 to trigger auto-detection/signature scan inside extract_sound
+                extract_sound(self.rom, self.txt, self.txt.base_path, -1, -1)
+                
+                # Now check if the database got sequences
+                if self.db.audio.sequences:
+                    self._alseq_candidates = [1] # Dummy value to trigger processing
+                    debug_print("Signature scan found audio sequences.")
+            
+            # Fallback: search for Segment 2 if not found by emulator
+            if not self.seg2_rom_offset:
+                debug_print("Emulator did not find Segment 2, searching via signature...")
+                from utils import find_all_needles_in_haystack
+                # Look for MIO0/Yaz0/etc headers
+                magic = b"MIO0" if self._compression_type == "MIO0" else b"Yaz0"
+                matches = find_all_needles_in_haystack(rom_data, magic)
+                for offset in matches:
+                    # Heuristic: Segment 2 is usually large and contains font data
+                    # For now, just try the first one that looks plausible
+                    if offset > 0x100000: # Skip early small blocks
+                        debug_print(f"Found plausible Segment 2 at 0x{offset:08X}")
+                        load_segment(2, offset, offset + 0x100000, True) # Heuristic size
+                        self.seg2_rom_offset = offset
+                        break
+
+            return
 
         # Build emulator command
         host = self.host

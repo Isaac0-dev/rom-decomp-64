@@ -1,4 +1,3 @@
-import quickjs
 import os
 import re
 import sys
@@ -6,15 +5,22 @@ import json
 import time
 from typing import Dict, Tuple, List
 
+IS_BROWSER = sys.platform == "emscripten"
+
+if IS_BROWSER:
+    try:
+        import js
+        import pyodide
+    except ImportError:
+        pass
 
 class N64JSHost:
     _transpile_cache: Dict[str, Tuple[str, List[str]]] = {}
 
     def __init__(self, n64js_root):
         self.root = os.path.abspath(n64js_root)
-        self.ctx = quickjs.Context()
-        self.modules = {}
         self.found_headers = []
+        self.found_alseq_headers = []
         self.detected_microcode = None
         self.total_cycles = 0
         self.last_microcode_probe_cycle = 0
@@ -22,9 +28,16 @@ class N64JSHost:
         self.compression_type = "MIO0"
         self.compression_done = False
         self.microcode_done = False
-        self._setup_environment()
+        
+        if IS_BROWSER:
+            self.ctx = None
+        else:
+            import quickjs
+            self.ctx = quickjs.Context()
+            self._setup_environment()
 
     def _setup_environment(self):
+        if IS_BROWSER: return # Handled by index.html side
         self.ctx.add_callable("console_log", self._python_console_log)
         self.ctx.add_callable("header_found", self._header_found)
         self.ctx.add_callable("microcode_found", self._microcode_found)
@@ -137,7 +150,8 @@ class N64JSHost:
         if self.compression_done and self.microcode_done:
             print("--- n64js completed tasks, exiting ---", flush=True)
             time.sleep(0.05)
-            os._exit(0)
+            if not IS_BROWSER:
+                os._exit(0)
 
     def _alseq_found(self, rom_offset, rev, sc):
         print(f"[PI DMA] ALSeqFile at ROM 0x{rom_offset:08X}", flush=True)
@@ -315,6 +329,10 @@ class N64JSHost:
             raise Exception(f"Failed to execute module {rel_path}: {e}")
 
     def init_emulator(self, rom_bytes, compression_type, rom_name="HEADLESS"):
+        if IS_BROWSER:
+            js.initNativeEmulator(rom_bytes, compression_type, rom_name)
+            return
+
         self.compression_type = compression_type
         print(f"[N64Host] Initializing emulator with {len(rom_bytes)} bytes...", flush=True)
         self.ctx.add_callable(
@@ -483,6 +501,22 @@ class N64JSHost:
         print("Emulator initialized and ready.", flush=True)
 
     def step(self, cycles=1000000):
+        if IS_BROWSER:
+            status_json = js.stepNativeEmulator(cycles)
+            if status_json:
+                import json
+                status = json.loads(status_json)
+                self.compression_done = status.get("compressionDone", False)
+                self.microcode_done = status.get("microcodeDone", False)
+                if self.compression_done and status.get("foundHeader"):
+                    h = status["foundHeader"]
+                    self._header_found(h["romOffset"], h["cartAddr"])
+                if self.microcode_done and "microcode" in status:
+                    self._microcode_found(json.dumps(status["microcode"]))
+                if "foundAlseq" in status:
+                    self.found_alseq_headers.extend(status["foundAlseq"])
+            return self.found_headers
+
         try:
             self.total_cycles += cycles
             self.ctx.eval(f"globalThis.__stepEmulator({cycles});")

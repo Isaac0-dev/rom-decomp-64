@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rom-decomp-64</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --text-color: #333;
+            --card-bg: white;
+            --border-color: #ddd;
+            --accent: #007bff;
+            --status-bg: #f8f9fa;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --border-color: #333;
+            --accent: #4da3ff;
+            --status-bg: #252525;
+        }
+
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; padding: 20px; background: var(--bg-color); color: var(--text-color); transition: background 0.3s, color 0.3s; }
+        .container { max-width: 900px; margin: auto; background: var(--card-bg); padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .header-row h1 { margin: 0; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+        .controls input[type="text"] { flex: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); color: var(--text-color); font-family: inherit; }
+        .controls button, #themeToggle { padding: 10px 20px; cursor: pointer; border: none; border-radius: 6px; background: var(--accent); color: white; font-weight: 600; font-family: inherit; transition: opacity 0.2s; }
+        .controls button:hover, #themeToggle:hover { opacity: 0.9; }
+        #themeToggle { background: var(--border-color); color: var(--text-color); }
+        .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px; }
+        .status-item { background: var(--bg-color); padding: 15px; border-radius: 6px; border: 1px solid var(--border-color); text-align: center; }
+        .status-item span { font-weight: bold; display: block; margin-top: 5px; color: var(--text-color); }
+        .status-complete { color: #28a745 !important; }
+        .status-processing { color: #007bff !important; }
+        [data-theme="dark"] .status-complete { color: #58d68d !important; }
+        [data-theme="dark"] .status-processing { color: #5dade2 !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>rom-decomp-64</h1>
+            <button id="themeToggle" onclick="toggleTheme()">Toggle Dark Mode</button>
+        </div>
+        <p>Convert an SM64 romhack to a format compatible with sm64coopdx directly in your browser.</p>
+
+        <script>
+            function toggleTheme() {
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+                localStorage.setItem('theme', isDark ? 'light' : 'dark');
+            }
+
+            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        </script>
+
+        <div id="loadingPyodide" class="card">
+            <strong>Status:</strong> <span id="pyodideStatus">Starting Web Worker...</span>
+        </div>
+
+        <div class="card" id="mainUI" style="display:none;">
+            <div class="controls">
+                <input type="file" id="romFile" style="display:none;" onchange="handleFileSelect(event)">
+                <input type="text" id="romPath" placeholder="Select a .z64 ROM file" readonly>
+                <button onclick="document.getElementById('romFile').click()">Browse ROM</button>
+                <button id="downloadBtn" style="display:none; background: #28a745;" onclick="downloadZip()">Download .zip</button>
+            </div>
+
+            <div class="status-grid">
+                <div class="status-item">Sequences<span id="status-sequences">Idle</span></div>
+                <div class="status-item">Level Scripts<span id="status-level_scripts">Idle</span></div>
+                <div class="status-item">Text<span id="status-text">Idle</span></div>
+            </div>
+        </div>
+
+        <div class="card" id="logContainer" style="display:none;">
+            <h3 style="margin-top:0; margin-bottom: 10px;">Console Output</h3>
+            <pre id="logOutput" style="height: 400px; overflow-y: auto; margin: 0;"></pre>
+        </div>
+    </div>
+
+    <script>
+        let worker;
+        let romBuffer;
+        let zipData;
+
+        function initWorker() {
+            worker = new Worker('worker.js?v=' + Date.now(), { type: 'module' });
+
+            worker.onmessage = (e) => {
+                console.log('[Main] Received message:', e.data);
+                const { type, data, component, state } = e.data;
+
+                if (type === 'status') {
+                    document.getElementById('pyodideStatus').textContent = data;
+                } else if (type === 'ready') {
+                    document.getElementById('loadingPyodide').style.display = 'none';
+                    document.getElementById('mainUI').style.display = 'block';
+                    document.getElementById('logContainer').style.display = 'block';
+                    log('Worker ready. Project files loaded.');
+                } else if (type === 'log') {
+                    log(data);
+                } else if (type === 'status-update') {
+                    const el = document.getElementById(`status-${component}`);
+                    if (el) {
+                        el.textContent = state;
+                        el.classList.remove('status-complete', 'status-processing');
+                        if (state === 'Complete') el.classList.add('status-complete');
+                        else if (state === 'Processing') el.classList.add('status-processing');
+                    }
+                } else if (type === 'complete') {
+                    zipData = data;
+                    document.getElementById('downloadBtn').style.display = 'inline-block';
+                    log('Extraction complete! Click "Download .zip" to save results.');
+                } else if (type === 'error') {
+                    document.getElementById('pyodideStatus').innerHTML = `<span style="color:red">Error: ${data}</span>`;
+                }
+            };
+
+            // Small delay to ensure the worker is fully initialized before sending messages
+            setTimeout(() => {
+                console.log('[Main] Sending init message to worker...');
+                worker.postMessage({ type: 'init' });
+            }, 100);
+        }
+
+        function log(msg) {
+            const el = document.getElementById('logOutput');
+            el.textContent += msg + '\n';
+            requestAnimationFrame(() => {
+                el.scrollTop = el.scrollHeight;
+            });
+            console.log(msg);
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                document.getElementById('romPath').value = file.name;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    romBuffer = new Uint8Array(e.target.result);
+                    log('ROM loaded into memory.');
+                    startExtraction(); // Trigger extraction
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        async function startExtraction() {
+            if (!romBuffer) {
+                log('Error: No ROM loaded.');
+                return;
+            }
+
+            // Remove startBtn dependency since button is gone
+            document.getElementById('downloadBtn').style.display = 'none';
+            log('Sending ROM to worker...');
+
+            worker.postMessage({ type: 'start', data: romBuffer });
+        }
+
+        function downloadZip() {
+            if (!zipData) return;
+            const blob = new Blob([zipData], { type: 'application/zip' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'extracted_assets.zip';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        initWorker();
+    </script>
+</body>
+</html>

@@ -232,8 +232,15 @@ def load_segment(seg_num: int, rom_start: int, rom_end: int, should_decompress: 
 
     # Read data from the global ROM object
     prev_pos = sRom.tell()
-    sRom.seek(rom_start)
-    data = sRom.read(rom_end - rom_start)
+
+    rom_size = len(sRom)
+    if rom_start < 0 or rom_start >= rom_size:
+        debug_print(f"Invalid ROM offset for segment 0x{seg_num:X}: 0x{rom_start:X} (ROM size: 0x{rom_size:X})")
+        return
+
+    sRom.seek(int(rom_start))
+    actual_end = min(rom_end, rom_size)
+    data = sRom.read(actual_end - rom_start)
     sRom.seek(prev_pos)
 
     # Auto-detect compression always (it could be different each time)

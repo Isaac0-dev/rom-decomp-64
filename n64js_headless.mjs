@@ -548,7 +548,9 @@ function maybeExit() {
     }
     if (compressionTaskDone && microcodeTaskDone) {
         console.log('--- n64js completed tasks, exiting ---');
-        process.exit(0);
+        if (typeof process !== 'undefined' && process.exit) {
+            process.exit(0);
+        }
     }
 }
 

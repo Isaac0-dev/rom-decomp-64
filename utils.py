@@ -595,8 +595,13 @@ def get_cur_level() -> Optional[str]:
     return None
 
 
-def debug_print(msg: str) -> None:
-    logger.debug(msg)
+try:
+    import js
+    def debug_print(msg: str) -> None:
+        js.console.debug(msg)
+except ImportError:
+    def debug_print(msg: str) -> None:
+        logger.debug(msg)
 
 
 def exception(msg: str) -> None:
