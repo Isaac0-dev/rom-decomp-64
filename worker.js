@@ -34,10 +34,15 @@ const dataFiles = [
     'function_matching/vanilla_functions_db.json.gz'
 ];
 
+// Define base URL dynamically to support local development and GitHub Pages
+const pathParts = self.location.pathname.split('/');
+const baseUrl = self.location.origin + (pathParts.length > 2 && pathParts[1] === 'rom-decomp-64' ? '/rom-decomp-64/' : '/');
+console.log('[Worker] Base URL:', baseUrl);
+
 async function init() {
     console.log('[Worker] Entering init()...');
     try {
-        const module = await import('./n64js_browser_wrapper.js');
+        const module = await import(baseUrl + 'n64js_browser_wrapper.js');
         emulator = new module.N64JSHeadless();
         console.log('[Worker] Emulator module imported.');
 
@@ -61,7 +66,7 @@ async function init() {
         for (const file of pythonFiles) {
             const dir = file.includes('/') ? file.substring(0, file.lastIndexOf('/')) : '';
             if (dir) pyodide.FS.mkdirTree('/' + dir);
-            const resp = await fetch(file + cacheBuster);
+            const resp = await fetch(baseUrl + file + cacheBuster);
             const text = await resp.text();
             pyodide.FS.writeFile('/' + file, text);
         }
@@ -69,7 +74,7 @@ async function init() {
         for (const file of dataFiles) {
             const dir = file.substring(0, file.lastIndexOf('/'));
             if (dir) pyodide.FS.mkdirTree('/' + dir);
-            const resp = await fetch(file + cacheBuster);
+            const resp = await fetch(baseUrl + file + cacheBuster);
             const buffer = await resp.arrayBuffer();
             pyodide.FS.writeFile('/' + file, new Uint8Array(buffer));
         }
