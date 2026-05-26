@@ -1,11 +1,28 @@
 console.log('[Worker] Worker script loaded!');
+self.postMessage({ type: 'worker-loaded' });
+console.log('[Worker] Sent worker-loaded message');
 
-// Import Pyodide using dynamic import
-const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.0/full/pyodide.mjs");
+// Define base URL dynamically to support local development and GitHub Pages
+const pathParts = self.location.pathname.split('/');
+const baseUrl = self.location.origin + (pathParts.length > 2 && pathParts[1] === 'rom-decomp-64' ? '/rom-decomp-64/' : '/');
+console.log('[Worker] Base URL:', baseUrl);
 
 let pyodide;
 let romBuffer;
 let emulator;
+
+self.onmessage = async (e) => {
+    console.log('[Worker] Received message in handler:', e.data);
+    const { type, data } = e.data;
+    
+    if (type === 'init') {
+        console.log('[Worker] Initializing...');
+        await init();
+    } else if (type === 'start') {
+        romBuffer = data;
+        await startExtraction();
+    }
+};
 
 const pythonFiles = [
     'browser_bridge.py',
@@ -34,11 +51,6 @@ const dataFiles = [
     'function_matching/vanilla_functions_db.json.gz'
 ];
 
-// Define base URL dynamically to support local development and GitHub Pages
-const pathParts = self.location.pathname.split('/');
-const baseUrl = self.location.origin + (pathParts.length > 2 && pathParts[1] === 'rom-decomp-64' ? '/rom-decomp-64/' : '/');
-console.log('[Worker] Base URL:', baseUrl);
-
 async function init() {
     console.log('[Worker] Entering init()...');
     try {
@@ -46,14 +58,16 @@ async function init() {
         emulator = new module.N64JSHeadless();
         console.log('[Worker] Emulator module imported.');
 
-    pyodide = await loadPyodide({
-        // Prevent fatal error on exit(0)
-        _pyodide_module: {
-            noExitRuntime: true,
-            onExit: () => console.log("Emulator exit handled.")
-        }
-    });
-    console.log('[Worker] Pyodide loaded.');
+        const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.0/full/pyodide.mjs");
+
+        pyodide = await loadPyodide({
+            // Prevent fatal error on exit(0)
+            _pyodide_module: {
+                noExitRuntime: true,
+                onExit: () => console.log("Emulator exit handled.")
+            }
+        });
+        console.log('[Worker] Pyodide loaded.');
         self.postMessage({ type: 'status', data: 'Loading packages...' });
         
         await pyodide.loadPackage('micropip');
@@ -86,19 +100,6 @@ async function init() {
         self.postMessage({ type: 'error', data: err.message });
     }
 }
-
-self.onmessage = async (e) => {
-    console.log('[Worker] Received message:', e.data);
-    const { type, data } = e.data;
-    
-    if (type === 'init') {
-        console.log('[Worker] Initializing...');
-        await init();
-    } else if (type === 'start') {
-        romBuffer = data;
-        await startExtraction();
-    }
-};
 
 async function startExtraction() {
     self.postMessage({ type: 'log', data: 'Starting extraction in worker...' });

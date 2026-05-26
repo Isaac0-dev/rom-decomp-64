@@ -45,7 +45,10 @@
     <div class="container">
         <div class="header-row">
             <h1>rom-decomp-64</h1>
-            <button id="themeToggle" onclick="toggleTheme()">Toggle Dark Mode</button>
+            <div style="display: flex; gap: 10px;">
+                <a href="https://github.com/Isaac0-dev/rom-decomp-64" target="_blank" rel="noopener noreferrer" style="text-decoration: none; padding: 10px 20px; border-radius: 6px; background: var(--border-color); color: var(--text-color); font-weight: 600; font-family: inherit; transition: opacity 0.2s;">GitHub</a>
+                <button id="themeToggle" onclick="toggleTheme()">Toggle Dark Mode</button>
+            </div>
         </div>
         <p>Convert an SM64 romhack to a format compatible with sm64coopdx directly in your browser.</p>
 
@@ -97,9 +100,13 @@
                 console.log('[Main] Received message:', e.data);
                 const { type, data, component, state } = e.data;
 
-                if (type === 'status') {
+                if (type === 'worker-loaded') {
+                    console.log('[Main] Worker loaded signal received! Sending init message...');
+                    worker.postMessage({ type: 'init' });
+                } else if (type === 'status') {
                     document.getElementById('pyodideStatus').textContent = data;
                 } else if (type === 'ready') {
+                    console.log('[Main] Worker ready signal received.');
                     document.getElementById('loadingPyodide').style.display = 'none';
                     document.getElementById('mainUI').style.display = 'block';
                     document.getElementById('logContainer').style.display = 'block';
@@ -122,12 +129,6 @@
                     document.getElementById('pyodideStatus').innerHTML = `<span style="color:red">Error: ${data}</span>`;
                 }
             };
-
-            // Small delay to ensure the worker is fully initialized before sending messages
-            setTimeout(() => {
-                console.log('[Main] Sending init message to worker...');
-                worker.postMessage({ type: 'init' });
-            }, 100);
         }
 
         function log(msg) {
