@@ -595,11 +595,12 @@ def get_cur_level() -> Optional[str]:
     return None
 
 
-try:
+from n64_host import IS_BROWSER
+if IS_BROWSER:
     import js
     def debug_print(msg: str) -> None:
         js.console.debug(msg)
-except ImportError:
+else:
     def debug_print(msg: str) -> None:
         logger.debug(msg)
 

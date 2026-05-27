@@ -202,8 +202,6 @@ def JUMP_LINK(values):
     _, _, offset = CMD_BBH(values)
     location = CMD_PTR(values)
 
-    seg_phys = segmented_to_virtual(location)
-
     caller_name = None
     if ctx.level_script_tracker:
         caller_name = ctx.level_script_tracker[-1]
@@ -239,6 +237,7 @@ def JUMP_LINK(values):
         pending_parse(location)
         location_name = matched_name
     elif record_candidate and ctx.curr_area == -1:
+        seg_phys = segmented_to_virtual(location)
         if caller_name is not None:
             ctx.callers_map.setdefault(seg_phys, set()).add(caller_name)
         # fallback to deferred candidate placeholder and record for later processing
@@ -578,7 +577,6 @@ def AREA(values):
     ctx.curr_area = index
 
     from geo_layout import parse_geo_layout
-
     geo_rec = parse_geo_layout(
         geo, ctx.txt, context_prefix=ctx.current_context_prefix, is_level=True
     )
