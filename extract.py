@@ -126,6 +126,25 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
 
     exit_code = pipeline.run()
 
+    """ vvvv code for development purposes vvvv """
+    from n64_host import IS_BROWSER
+    if not IS_BROWSER and sys.platform.startswith("linux"):
+        executed_dir = os.getcwd()
+        git_tracking_dir = os.path.join(executed_dir, "git_tracking", filename)
+        if os.path.exists(git_tracking_dir):
+            sync_git_sh = os.path.join(executed_dir, "sync_git.sh")
+            if os.path.exists(sync_git_sh):
+                os.system(f"bash {sync_git_sh} {filename}")
+
+        print("Copying to sm64ex-coop mods folder...")
+        import shutil
+
+        target_mods_path = os.path.expanduser("~/.local/share/sm64ex-coop/mods/012.sm64decade")
+        source_path = pipeline.output_dir
+        shutil.rmtree(target_mods_path, ignore_errors=True)
+        shutil.copytree(source_path, target_mods_path)
+    """ ^^^^ code for development purposes ^^^^ """
+
     # Success if the pipeline completes without exception
     ctx.reached_end = True
 
@@ -133,7 +152,7 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
         if browser_bridge.run_in_browser():
             return exit_code
         sys.exit(0 if exit_code == 0 else 1)
-    
+
     return exit_code
 
 
