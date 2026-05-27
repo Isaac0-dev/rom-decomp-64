@@ -331,15 +331,30 @@ class ExtractionPipeline:
                 for offset in host_obj.found_alseq_headers:
                     ap.parse(offset)
             else:
-                debug_print("Emulator did not find audio sequences, attempting signature scan...")
-                from audio import extract_sound, get_audio_processor
-                # Pass -1 to trigger auto-detection/signature scan inside extract_sound
-                extract_sound(self.rom, self.txt, self.txt.base_path, -1, -1)
-
-                # Now check if the database got sequences
-                if self.db.audio.sequences:
-                    self._alseq_candidates = [1] # Dummy value to trigger processing
-                    debug_print("Signature scan found audio sequences.")
+                debug_print("Emulator did not find audio sequences, scanning ROM for ALSeqFile headers...")
+                # Match the desktop emulator's PI DMA heuristic: revision <= 5,
+                # seq_count between 10 and 100.  This avoids the thousands of
+                # false positives that come from random data in the 1-256 range.
+                scan_start = min(0x500000, len(rom_data))
+                scan_end = min(0x700000, len(rom_data))
+                alseq_candidates = []
+                for offset in range(scan_start, scan_end - 4, 4):
+                    revision = struct.unpack(">H", rom_data[offset:offset + 2])[0]
+                    if revision < 1 or revision > 5:
+                        continue
+                    seq_count = struct.unpack(">H", rom_data[offset + 2:offset + 4])[0]
+                    if 10 <= seq_count <= 100:
+                        alseq_candidates.append(offset)
+                if alseq_candidates:
+                    debug_print(f"Found {len(alseq_candidates)} ALSeqFile header candidates near 0x{scan_start:X}-0x{scan_end:X}")
+                    self._alseq_candidates = alseq_candidates
+                    self.db.audio.alseq_candidates = alseq_candidates
+                else:
+                    debug_print("No ALSeqFile headers found, falling back to signature scan...")
+                    from audio import extract_sound, get_audio_processor
+                    extract_sound(self.rom, self.txt, self.txt.base_path, -1, -1)
+                    if self.db.audio.sequences:
+                        self._alseq_candidates = [1]
 
             debug_print(f"Segment 2 status: seg2_rom_offset={self.seg2_rom_offset}, found_headers={len(host_obj.found_headers)}")
             # Fallback: search for Segment 2 if not found by emulator
