@@ -14,6 +14,7 @@ if IS_BROWSER:
     except ImportError:
         pass
 
+
 class N64JSHost:
     _transpile_cache: Dict[str, Tuple[str, List[str]]] = {}
 
@@ -28,16 +29,18 @@ class N64JSHost:
         self.compression_type = "MIO0"
         self.compression_done = False
         self.microcode_done = False
-        
+
         if IS_BROWSER:
             self.ctx = None
         else:
             import quickjs
+
             self.ctx = quickjs.Context()
             self._setup_environment()
 
     def _setup_environment(self):
-        if IS_BROWSER: return # Handled by index.html side
+        if IS_BROWSER:
+            return  # Handled by index.html side
         self.ctx.add_callable("console_log", self._python_console_log)
         self.ctx.add_callable("header_found", self._header_found)
         self.ctx.add_callable("microcode_found", self._microcode_found)
@@ -507,6 +510,7 @@ class N64JSHost:
             status_json = js.stepNativeEmulator(cycles)
             if status_json:
                 import json
+
                 status = json.loads(status_json)
                 self.compression_done = status.get("compressionDone", False)
                 self.microcode_done = status.get("microcodeDone", False)

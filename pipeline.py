@@ -287,20 +287,28 @@ class ExtractionPipeline:
             with open(self.rom_path, "rb") as f:
                 rom_data = f.read()
 
-            host_obj.init_emulator(rom_data, self._compression_type or "MIO0", os.path.basename(self.rom_path))
+            host_obj.init_emulator(
+                rom_data, self._compression_type or "MIO0", os.path.basename(self.rom_path)
+            )
 
             # Step the emulator until we find what we need or timeout
             start_time = time.time()
-            debug_print(f"Starting browser emulation loop. Compression: {self._compression_type or 'MIO0'}")
+            debug_print(
+                f"Starting browser emulation loop. Compression: {self._compression_type or 'MIO0'}"
+            )
             try:
                 while time.time() - start_time < 30.0:
                     host_obj.step(5_000_000)
                     if host_obj.compression_done and host_obj.microcode_done:
-                        debug_print("Browser emulation loop finished: compression and microcode detected.")
+                        debug_print(
+                            "Browser emulation loop finished: compression and microcode detected."
+                        )
                         break
                     # Periodically log progress
                     elapsed = time.time() - start_time
-                    debug_print(f"Emulation loop running... Time: {elapsed:.1f}s, CompDone: {host_obj.compression_done}, MicroDone: {host_obj.microcode_done}, HeadersFound: {len(host_obj.found_headers)}")
+                    debug_print(
+                        f"Emulation loop running... Time: {elapsed:.1f}s, CompDone: {host_obj.compression_done}, MicroDone: {host_obj.microcode_done}, HeadersFound: {len(host_obj.found_headers)}"
+                    )
                     time.sleep(0.5)
                 else:
                     debug_print("Browser emulation loop timed out.")
@@ -323,15 +331,18 @@ class ExtractionPipeline:
                 self.db.meta.microcode = "F3DEX2"
 
             # Process audio headers found by browser emulation
-            if hasattr(host_obj, 'found_alseq_headers') and host_obj.found_alseq_headers:
+            if hasattr(host_obj, "found_alseq_headers") and host_obj.found_alseq_headers:
                 self._alseq_candidates = host_obj.found_alseq_headers
                 self.db.audio.alseq_candidates = host_obj.found_alseq_headers
                 from audio import get_audio_processor
+
                 ap = get_audio_processor()
                 for offset in host_obj.found_alseq_headers:
                     ap.parse(offset)
             else:
-                debug_print("Emulator did not find audio sequences, scanning ROM for ALSeqFile headers...")
+                debug_print(
+                    "Emulator did not find audio sequences, scanning ROM for ALSeqFile headers..."
+                )
                 # Match the desktop emulator's PI DMA heuristic: revision <= 5,
                 # seq_count between 10 and 100.  This avoids the thousands of
                 # false positives that come from random data in the 1-256 range.
@@ -339,24 +350,29 @@ class ExtractionPipeline:
                 scan_end = min(0x700000, len(rom_data))
                 alseq_candidates = []
                 for offset in range(scan_start, scan_end - 4, 4):
-                    revision = struct.unpack(">H", rom_data[offset:offset + 2])[0]
+                    revision = struct.unpack(">H", rom_data[offset : offset + 2])[0]
                     if revision < 1 or revision > 5:
                         continue
-                    seq_count = struct.unpack(">H", rom_data[offset + 2:offset + 4])[0]
+                    seq_count = struct.unpack(">H", rom_data[offset + 2 : offset + 4])[0]
                     if 10 <= seq_count <= 100:
                         alseq_candidates.append(offset)
                 if alseq_candidates:
-                    debug_print(f"Found {len(alseq_candidates)} ALSeqFile header candidates near 0x{scan_start:X}-0x{scan_end:X}")
+                    debug_print(
+                        f"Found {len(alseq_candidates)} ALSeqFile header candidates near 0x{scan_start:X}-0x{scan_end:X}"
+                    )
                     self._alseq_candidates = alseq_candidates
                     self.db.audio.alseq_candidates = alseq_candidates
                 else:
                     debug_print("No ALSeqFile headers found, falling back to signature scan...")
                     from audio import extract_sound, get_audio_processor
+
                     extract_sound(self.rom, self.txt, self.txt.base_path, -1, -1)
                     if self.db.audio.sequences:
                         self._alseq_candidates = [1]
 
-            debug_print(f"Segment 2 status: seg2_rom_offset={self.seg2_rom_offset}, found_headers={len(host_obj.found_headers)}")
+            debug_print(
+                f"Segment 2 status: seg2_rom_offset={self.seg2_rom_offset}, found_headers={len(host_obj.found_headers)}"
+            )
             # Fallback: search for Segment 2 if not found by emulator
             if not self.seg2_rom_offset:
                 debug_print("Emulator did not find Segment 2, searching via signature...")
@@ -365,46 +381,68 @@ class ExtractionPipeline:
                 # the correct address the real emulator would find via PI DMA.
                 # Try that first.
                 TRADITIONAL_SEG2 = 0x800000
-                if len(rom_data) > TRADITIONAL_SEG2 + 12 and rom_data[TRADITIONAL_SEG2:TRADITIONAL_SEG2 + 4] == magic:
-                    block_size = self._get_compressed_block_size(TRADITIONAL_SEG2, self._compression_type or "MIO0")
+                if (
+                    len(rom_data) > TRADITIONAL_SEG2 + 12
+                    and rom_data[TRADITIONAL_SEG2 : TRADITIONAL_SEG2 + 4] == magic
+                ):
+                    block_size = self._get_compressed_block_size(
+                        TRADITIONAL_SEG2, self._compression_type or "MIO0"
+                    )
                     if block_size > 0:
-                        decomp_size = struct.unpack(">I", rom_data[TRADITIONAL_SEG2 + 4:TRADITIONAL_SEG2 + 8])[0]
-                        debug_print(f"Using traditional Segment 2 at 0x{TRADITIONAL_SEG2:08X} (decomp={decomp_size}, block={block_size})")
+                        decomp_size = struct.unpack(
+                            ">I", rom_data[TRADITIONAL_SEG2 + 4 : TRADITIONAL_SEG2 + 8]
+                        )[0]
+                        debug_print(
+                            f"Using traditional Segment 2 at 0x{TRADITIONAL_SEG2:08X} (decomp={decomp_size}, block={block_size})"
+                        )
                         load_segment(2, TRADITIONAL_SEG2, TRADITIONAL_SEG2 + block_size, True)
                         self.seg2_rom_offset = TRADITIONAL_SEG2
                         self.db.global_segs[2] = GlobalSegRecord(
-                            seg_num=2, rom_offset=TRADITIONAL_SEG2, rom_end=TRADITIONAL_SEG2 + block_size
+                            seg_num=2,
+                            rom_offset=TRADITIONAL_SEG2,
+                            rom_end=TRADITIONAL_SEG2 + block_size,
                         )
                         from segment2_extractor import get_segment2_processor
+
                         s2p = get_segment2_processor()
                         s2p.ctx.txt = self.txt
                         s2p.parse(0)
                     else:
-                        debug_print(f"Traditional Segment 2 at 0x{TRADITIONAL_SEG2:08X} exists but decompression failed")
+                        debug_print(
+                            f"Traditional Segment 2 at 0x{TRADITIONAL_SEG2:08X} exists but decompression failed"
+                        )
                 if not self.seg2_rom_offset:
                     # Traditional location not valid — scan all MIO0 matches.
                     # Segment 2 is the first large block (>= 64KB decompressed).
                     from utils import find_all_needles_in_haystack
+
                     matches = find_all_needles_in_haystack(rom_data, magic)
-                    debug_print(f"Found {len(matches)} MIO0 magic matches, scanning for large blocks")
+                    debug_print(
+                        f"Found {len(matches)} MIO0 magic matches, scanning for large blocks"
+                    )
                     MIN_SEG2_DECOMP_SIZE = 0x10000
                     for offset in matches:
                         if offset == TRADITIONAL_SEG2:
                             continue
                         if len(rom_data) < offset + 12:
                             continue
-                        decomp_size = struct.unpack(">I", rom_data[offset + 4:offset + 8])[0]
+                        decomp_size = struct.unpack(">I", rom_data[offset + 4 : offset + 8])[0]
                         if decomp_size < MIN_SEG2_DECOMP_SIZE:
                             continue
-                        block_size = self._get_compressed_block_size(offset, self._compression_type or "MIO0")
+                        block_size = self._get_compressed_block_size(
+                            offset, self._compression_type or "MIO0"
+                        )
                         if block_size > 0:
-                            debug_print(f"Selecting Segment 2 at 0x{offset:08X} (decomp={decomp_size}, block={block_size})")
+                            debug_print(
+                                f"Selecting Segment 2 at 0x{offset:08X} (decomp={decomp_size}, block={block_size})"
+                            )
                             load_segment(2, offset, offset + block_size, True)
                             self.seg2_rom_offset = offset
                             self.db.global_segs[2] = GlobalSegRecord(
                                 seg_num=2, rom_offset=offset, rom_end=offset + block_size
                             )
                             from segment2_extractor import get_segment2_processor
+
                             s2p = get_segment2_processor()
                             s2p.ctx.txt = self.txt
                             s2p.parse(0)

@@ -239,7 +239,11 @@ class GBI2(GBI1):
                 0x18: "G_MWO_POINT_XYSCREEN",
                 0x1C: "G_MWO_POINT_ZSCREEN",
             }.get(offset, f"0x{offset:02X}")
-            dis.set_cmd("gsSPModifyVertex", {"vtx": vtx, "offset": offset_name, "value": cmd1}, commented_out=True)
+            dis.set_cmd(
+                "gsSPModifyVertex",
+                {"vtx": vtx, "offset": offset_name, "value": cmd1},
+                commented_out=True,
+            )
 
     def execute_cull_dl(self, cmd0, cmd1, dis):
         vstart = self._SHIFTR(cmd0, 1, 15)

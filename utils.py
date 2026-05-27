@@ -5,6 +5,7 @@ from enum import Enum
 from typing import List, Dict, Tuple, Optional, Any, Union
 import logging
 import os
+from n64_host import IS_BROWSER
 
 
 class ParseError(Exception):
@@ -595,12 +596,13 @@ def get_cur_level() -> Optional[str]:
     return None
 
 
-from n64_host import IS_BROWSER
 if IS_BROWSER:
     import js
+
     def debug_print(msg: str) -> None:
         js.console.debug(msg)
 else:
+
     def debug_print(msg: str) -> None:
         logger.debug(msg)
 

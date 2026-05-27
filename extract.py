@@ -128,6 +128,7 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
 
     """ vvvv code for development purposes vvvv """
     from n64_host import IS_BROWSER
+
     if not IS_BROWSER and sys.platform.startswith("linux"):
         executed_dir = os.getcwd()
         git_tracking_dir = os.path.join(executed_dir, "git_tracking", filename)
