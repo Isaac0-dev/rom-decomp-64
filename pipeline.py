@@ -1037,41 +1037,10 @@ class ExtractionPipeline:
         ap = get_audio_processor()
         ap.serialize(self.db.audio)
 
-        if self.db.meta.hack_type == "SM64 Editor" or self.db.meta.hack_type == "SM64 Rom Manager":
-            # If we didn't see any modification to the entry level, some hacks
-            # put their entry level adjustment at 0x6D6A
-            if (
-                not ctx.level_values.entry_level.is_modified()
-                and self.rom[0x6D68 : 0x6D68 + 2] == b"\x24\x05"
-            ):
-                ctx.level_values.entry_level = int.from_bytes(self.rom[0x6D6A : 0x6D6A + 2], "big")
+        # Write tweaks
+        from tweaks import write_tweaks
 
-            if not ctx.behavior_values.toad_star_1_requirement.is_modified():
-                ctx.behavior_values.toad_star_1_requirement = int.from_bytes(
-                    self.rom[0x3199B : 0x3199B + 1], "big"
-                )
-            if not ctx.behavior_values.toad_star_2_requirement.is_modified():
-                ctx.behavior_values.toad_star_2_requirement = int.from_bytes(
-                    self.rom[0x319CF : 0x319CF + 1], "big"
-                )
-            if not ctx.behavior_values.toad_star_3_requirement.is_modified():
-                ctx.behavior_values.toad_star_3_requirement = int.from_bytes(
-                    self.rom[0x31A03 : 0x31A03 + 1], "big"
-                )
-
-            if not ctx.behavior_values.mips_star_1_requirement.is_modified():
-                ctx.behavior_values.mips_star_1_requirement = int.from_bytes(
-                    self.rom[0xB34CB : 0xB34CB + 1], "big"
-                )
-            if not ctx.behavior_values.mips_star_2_requirement.is_modified():
-                ctx.behavior_values.mips_star_2_requirement = int.from_bytes(
-                    self.rom[0xB3523 : 0xB3523 + 1], "big"
-                )
-
-        tweaks = ctx.level_values.get_tweaks_lua()
-        tweaks += ctx.behavior_values.get_tweaks_lua()
-        if tweaks:
-            ctx.txt.write_lua(tweaks, "tweaks.lua")
+        write_tweaks()
 
         # Apply Lua modules
         from lua_modules import apply_lua_modules
