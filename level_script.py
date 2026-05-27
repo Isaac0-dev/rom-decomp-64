@@ -26,70 +26,6 @@ from address_map import get_physical_symbol, SymbolType
 parsed_scripts: Set[Tuple[int, str]] = set()
 _scripts_in_progress: Set[int] = set()  # Guard against re-entrant parse loops
 
-# --- Original Error Handling System ---
-PARSE_STATS = {
-    "commands": 0,
-    "errors": 0,
-    "scripts": 0,
-    "scripts_with_errors": 0,
-}
-
-_current_script_had_error = False
-
-
-class LevelScriptError(Exception):
-    def __init__(self, root_exc, locations=None):
-        self.root_exc = root_exc
-        self.locations = locations or []
-        try:
-            msg = str(self)
-        except Exception:
-            msg = repr(root_exc)
-        super().__init__(msg)
-
-    def add_location(self, loc):
-        if not self.locations or self.locations[-1] != loc:
-            self.locations.append(loc)
-
-    def __str__(self):
-        loc_str = " -> ".join(f"0x{loc:08X}" for loc in reversed(self.locations))
-        return f"{self.root_exc}\nChain: {loc_str}"
-
-
-def _wrap_script_exception(exc, loc):
-    if isinstance(exc, LevelScriptError):
-        exc.add_location(loc)
-        return exc
-    return LevelScriptError(exc, [loc])
-
-
-def _mark_error(count=1):
-    global _current_script_had_error
-    PARSE_STATS["errors"] += count
-    _current_script_had_error = True
-
-
-def print_parse_summary():
-    cmds = PARSE_STATS["commands"]
-    errs = PARSE_STATS["errors"]
-    scripts = PARSE_STATS["scripts"]
-    scripts_err = PARSE_STATS["scripts_with_errors"]
-
-    success_pct = 100.0 * (cmds - errs) / cmds if cmds > 0 else 0.0
-    if scripts > 0:
-        script_success_pct = 100.0 * (scripts - scripts_err) / scripts
-    else:
-        script_success_pct = 100.0 if scripts_err == 0 else 0.0
-
-    print("\n=== Level Script Parse summary ===")
-    print(f"commands parsed: {cmds}")
-    print(f"command errors: {errs}")
-    print(f"command success: {success_pct:.2f}%")
-    print(f"scripts parsed: {scripts}")
-    print(f"scripts with errors: {scripts_err}")
-    print(f"script success: {script_success_pct:.2f}%")
-    return int((script_success_pct + success_pct) / 2)
-
 
 # --- LevelScriptProcessor ---
 
@@ -97,7 +33,6 @@ def print_parse_summary():
 class LevelScriptProcessor(BaseProcessor):
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[LevelRecord]:
         """Refactored version of process_level_script and parse_level_script."""
-        global _current_script_had_error
         label = kwargs.get("label")
         label_non_recursive = kwargs.get("label_non_recursive")
 
@@ -118,7 +53,6 @@ class LevelScriptProcessor(BaseProcessor):
         segment_num = segment_from_addr(segmented_addr)
         data = get_segment(segment_num)
         if data is None:
-            _mark_error()
             debug_fail(f"end of the road: failed to load 0x{segmented_addr:08x}")
             return None
 
@@ -132,7 +66,6 @@ class LevelScriptProcessor(BaseProcessor):
         ctx.script_cmd_history.append([])
 
         from deferred_output import DeferredScriptOutput
-
         prev_deferred = ctx.deferred
         ctx.deferred = DeferredScriptOutput()
         if prev_deferred is not None:
@@ -179,17 +112,11 @@ class LevelScriptProcessor(BaseProcessor):
 
             parsed_scripts.add((seg_phys_start, name))
 
-            _current_script_had_error = False
             rom.seek(seg_offset, 0)
             commands_ir = []
 
             while True:
-                try:
-                    continueParsing, ir = parse_line(rom, seg_offset, seg_phys_start)
-                except Exception as e:
-                    e = _wrap_script_exception(e, seg_phys_start)
-                    _mark_error()
-                    raise e
+                continueParsing, ir = parse_line(rom, seg_offset, seg_phys_start)
 
                 if isinstance(ir, CommandIR):
                     commands_ir.append(ir)
@@ -327,7 +254,6 @@ def parse_line(rom, seg_offset, seg_phys_start):
     curr_phys = seg_phys_start + (prev_offset - seg_offset)
     header = read_int(rom)
     if header is None:
-        _mark_error()
         return False, ""
 
     command, size, _ = CMD_BBH([header])
@@ -343,10 +269,10 @@ def parse_line(rom, seg_offset, seg_phys_start):
                     ctx.level_script_tracker[-1] = match
             rom.seek(prev_offset + 4, 0)
 
-    PARSE_STATS["commands"] += 1
-    if command >= len(parse_command_table):
-        _mark_error()
-        debug_print(f"WARNING: UNRECOGNISED LEVEL CMD OP {command} at 0x{curr_phys:08x}")
+    if command < 0 or command >= len(parse_command_table):
+        debug_fail(
+            f"WARNING: UNRECOGNISED LEVEL CMD OP {command:02X} at phys: 0x{curr_phys:08x}, seg: 0x{seg_phys_start:08x}, offset: 0x{prev_offset - seg_offset:08x}"
+        )
         return False, ""
 
     info = parse_command_table[command]
