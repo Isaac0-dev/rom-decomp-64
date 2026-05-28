@@ -10,15 +10,20 @@ class MOPBehavior:
     lua_code: str
     behavior_code: str
     model_folders: list[str] | None = None
+    dependencies: list[str] | None = None
 
 
 MOP_BEHAVIORS: Dict[str, MOPBehavior] = {}
 
 
 def register_mop_behavior(
-    name: str, lua_code: str, behavior_code: str, model_folders: list[str] | None = None
+    name: str,
+    lua_code: str,
+    behavior_code: str,
+    model_folders: list[str] | None = None,
+    dependencies: list[str] | None = None,
 ):
-    bhv = MOPBehavior(name, lua_code, behavior_code, model_folders or [])
+    bhv = MOPBehavior(name, lua_code, behavior_code, model_folders or [], dependencies or [])
     MOP_BEHAVIORS[name] = bhv
     return bhv
 
@@ -77,6 +82,7 @@ local dist_between_objects = dist_between_objects
 local obj_mark_for_deletion = obj_mark_for_deletion
 local mario_stop_riding_object = mario_stop_riding_object
 local obj_get_next_with_behavior_id = obj_get_next_with_behavior_id
+local obj_count_objects_with_behavior_id = obj_count_objects_with_behavior_id
 
 -- Packing and unpacking like this allows for C-like type conversions
 local string_pack = string.pack
@@ -196,6 +202,12 @@ end
 ---@return number
 local function lerp(start_point, end_point, time)
     return start_point * (1 - time) + end_point * time
+end
+
+local function bhv_koopa_shell_flame_spawn(obj)
+    for i = 0, 2 do
+        spawn_object(obj, E_MODEL_RED_FLAME, id_bhvKoopaShellFlame)
+    end
 end
 
 --- @param obj Object
@@ -574,6 +586,7 @@ const BehaviorScript bhvShrink_Platform_MOP[] = {
 };
 """,
     ["Shrink_Platform_MOP", "Shrink_Platform_Border_MOP"],
+    ["bhvShrink_Platform_Border_MOP"],
 )
 
 register_mop_behavior(
@@ -742,6 +755,7 @@ const BehaviorScript bhvFlipswap_Platform_MOP[] = {
 };
 """,
     ["Flipswap_Platform_MOP", "Flipswap_Platform_Border_MOP"],
+    ["bhvFlipswap_Platform_Border_MOP"],
 )
 
 register_mop_behavior(
@@ -791,6 +805,7 @@ const BehaviorScript bhvMoving_Grid_Platform_MOP[] = {
 };
 """,
     ["Moving_Grid_Platform_MOP", "Moving_Grid_Platform_Gears_MOP"],
+    ["bhvMoving_Grid_Platform_Gears_MOP"],
 )
 
 register_mop_behavior(
@@ -827,32 +842,52 @@ local E_MODEL_GREEN_SWITCHBOARD_GEARS = smlua_model_util_get_id("Green_Switchboa
 
 function bhv_Green_Switchboard_init(obj)
     obj_set_model_extended(obj, E_MODEL_GREEN_SWITCHBOARD)
-    -- Spawns the gears
-    spawn_object(obj, E_MODEL_GREEN_SWITCHBOARD_GEARS, id_bhvGreen_Switchboard_Gears_MOP)
+    obj.oIntroLakituCloud = spawn_object(obj, E_MODEL_GREEN_SWITCHBOARD_GEARS, id_bhvGreen_Switchboard_Gears_MOP)
 end
 
 function bhv_Green_Switchboard_loop(obj)
-    local m = gMarioStates[0]
-    local move = 0
+    local MAX_SPEED = 20.0
+    local SPEED_INC = 2.0
+    local child = obj.oIntroLakituCloud
+    local dot = 0
+    local dotH = 0
 
-    if cur_obj_is_mario_on_platform() == 1 and not is_bubbled(m) then
+    child.oFaceAnglePitch = child.oFaceAnglePitch + (obj.oForwardVel * 200)
+    obj_copy_pos(child, obj)
+
+    if cur_obj_is_mario_on_platform() == 1 and not is_bubbled(gMarioStates[0]) then
+        local m = gMarioStates[0]
+
         local dx = m.pos.x - obj.oPosX
         local dz = m.pos.z - obj.oPosZ
+        local dHx = obj.oPosX - obj.oHomeX
+        local dHz = obj.oPosZ - obj.oHomeZ
+        local facingZ = coss(obj.oFaceAngleYaw)
+        local facingX = sins(obj.oFaceAngleYaw)
 
-        -- Rotates the switchboard based on Mario's position
-        local d_pos = dx * sins(obj.oMoveAngleYaw) + dz * coss(obj.oMoveAngleYaw)
-        obj.oFaceAnglePitch = approach_by_increment(d_pos * -10, obj.oFaceAnglePitch, 128)
+        dot = facingZ * dz + facingX * dx
+        dotH = facingZ * dHz + facingX * dHx
 
-        -- Moves the switchboard based on its pitch
-        move = obj.oFaceAnglePitch / -10
-        if move > 10 then
-            obj.oForwardVel = approach_by_increment(move, obj.oForwardVel, 2)
-        elseif move < -10 then
-            obj.oForwardVel = approach_by_increment(move, obj.oForwardVel, 2)
+        if dot > 0 then
+            if dotH < ((obj.oBehParams >> 24) & 0xFF) * 16 then
+                obj.oForwardVel = approach_by_increment(MAX_SPEED, obj.oForwardVel, SPEED_INC)
+            else
+                obj.oForwardVel = 0
+            end
+            obj.oFaceAnglePitch = approach_by_increment(2048.0, obj.oFaceAnglePitch, 128.0)
+        else
+            if dotH > obj.oBehParams2ndByte * -16 then
+                obj.oForwardVel = approach_by_increment(-MAX_SPEED, obj.oForwardVel, SPEED_INC)
+            else
+                obj.oForwardVel = 0
+            end
+            if (obj.oFaceAnglePitch > -2048) then
+                obj.oFaceAnglePitch = approach_by_increment(-2048.0, obj.oFaceAnglePitch, 128.0)
+            end
         end
     else
-        obj.oForwardVel = approach_by_increment(0, obj.oForwardVel, 0.5)
-        obj.oFaceAnglePitch = approach_by_increment(0, obj.oFaceAnglePitch, 128)
+        obj.oForwardVel = approach_by_increment(0.0, obj.oForwardVel, SPEED_INC)
+        obj.oFaceAnglePitch = approach_by_increment(0.0, obj.oFaceAnglePitch, 128.0)
     end
 
     cur_obj_move_using_vel()
@@ -863,9 +898,8 @@ function bhv_Green_Switchboard_Gears_loop(obj)
     local parent = obj.parentObj
     if not parent then return end
 
-    -- Move with our parent and rotate using the parent's forward velocity
     obj_copy_pos(obj, parent)
-    obj.oFaceAnglePitch = obj.oFaceAnglePitch + parent.oForwardVel * 64
+    obj.oFaceAnglePitch = obj.oFaceAnglePitch + parent.oForwardVel * 200
 end
 """,
     """
@@ -891,6 +925,7 @@ const BehaviorScript bhvGreen_Switchboard_Gears_MOP[] = {
 };
 """,
     ["Green_Switchboard_MOP", "Green_Switchboard_Gears_MOP"],
+    ["bhvGreen_Switchboard_Gears_MOP"],
 )
 
 register_mop_behavior(
@@ -898,21 +933,75 @@ register_mop_behavior(
     """
 local E_MODEL_MOVING_ROTATING_BLOCK = smlua_model_util_get_id("Moving_Rotating_Block_MOP")
 local ZPLUS = 0 local ZMINUS = 1 local XPLUS = 2 local XMINUS = 3 local LOOP = 4
-local Paths = {
-    [ZPLUS] = {0, 0, 1}, [ZMINUS] = {0, 0, -1}, [XPLUS] = {1, 0, 0}, [XMINUS] = {-1, 0, 0}
-}
+
+local MoveRotatePath1 = { ZPLUS, XPLUS, ZMINUS, XMINUS, LOOP }
+local MoveRotatePath2 = { ZPLUS, ZPLUS, ZPLUS, ZMINUS, ZMINUS, ZMINUS, LOOP }
+local MoveRotatePath3 = { XPLUS, XPLUS, XPLUS, XMINUS, XMINUS, XMINUS, LOOP }
+local MoveRotatePath4 = { XMINUS, XMINUS, XMINUS, XPLUS, XPLUS, XPLUS, LOOP }
+local MoveRotatePath5 = { XMINUS, XPLUS, LOOP }
+local MoveRotatePath6 = { XPLUS, XMINUS, LOOP }
+
+local Paths = { MoveRotatePath1, MoveRotatePath2, MoveRotatePath3, MoveRotatePath4, MoveRotatePath5, MoveRotatePath6 }
+
+local PLAT_SPEED = 8
+local PLAT_FLIP_START_TIMER = 0x110
+local PLAT_FLIP_END_TIMER = 0x130
+local PLAT_MOVEMENT_FRAMES = 0x3C
+local PLAT_WARNING_SPEED = 0x40
 
 function bhv_Moving_Rotating_Block_init(obj)
+    obj.oTimer = obj.oTimer + 0x80 * (obj.oBehParams >> 24)
+    obj.oAnimState = (obj.oBehParams >> 24)
+    obj.oUnk1A8 = 0
+    obj.oUnk94 = 0
     obj_set_model_extended(obj, E_MODEL_MOVING_ROTATING_BLOCK)
 end
 
 function bhv_Moving_Rotating_Block_loop(obj)
-    local p = Paths[obj.oBehParams2ndByte]
-    if p then
-        obj.oVelX = p[1] * 10
-        obj.oVelY = p[2] * 10
-        obj.oVelZ = p[3] * 10
+    local direction = 0
+
+    if obj.oTimer == PLAT_FLIP_START_TIMER - 32 then
+        obj.oAngleVelPitch = obj.oAngleVelPitch - PLAT_WARNING_SPEED
+    elseif obj.oTimer == PLAT_FLIP_START_TIMER then
+        obj.oAngleVelPitch = obj.oAngleVelPitch + 0x400 + PLAT_WARNING_SPEED
+    elseif obj.oTimer == PLAT_FLIP_END_TIMER + 2 then
+        obj.oAngleVelPitch = 0
+        obj.oTimer = 0
     end
+
+    direction = Paths[obj.oBehParams2ndByte + 1][obj.oUnk94 + 1]
+
+    switch(direction, {
+        [ZPLUS] = function ()
+            obj.oUnk1A8 = obj.oUnk1A8 + 1
+            obj.oVelZ = PLAT_SPEED
+            obj.oVelX = 0
+        end,
+        [ZMINUS] = function ()
+            obj.oUnk1A8 = obj.oUnk1A8 + 1
+            obj.oVelZ = -PLAT_SPEED
+            obj.oVelX = 0
+        end,
+        [XPLUS] = function ()
+            obj.oUnk1A8 = obj.oUnk1A8 + 1
+            obj.oVelX = PLAT_SPEED
+            obj.oVelZ = 0
+        end,
+        [XMINUS] = function ()
+            obj.oUnk1A8 = obj.oUnk1A8 + 1
+            obj.oVelX = -PLAT_SPEED
+            obj.oVelZ = 0
+        end,
+        ["default"] = function ()
+            obj.oUnk94 = 0
+        end
+    })
+
+    if obj.oUnk1A8 == PLAT_MOVEMENT_FRAMES then
+        obj.oUnk94 = obj.oUnk94 + 1
+        obj.oUnk1A8 = 0
+    end
+
     cur_obj_rotate_face_angle_using_vel()
     cur_obj_move_using_vel()
 end
@@ -1029,21 +1118,42 @@ register_mop_behavior(
     """
 local E_MODEL_CHECKPOINT = smlua_model_util_get_id("Checkpoint_Flag_MOP")
 
+local last_touched_checkpoint = nil
+local stored_2nd_byte = 0
+
 function bhv_checkpoint_flag_init(obj)
     obj_set_model_extended(obj, E_MODEL_CHECKPOINT)
 end
 
 function bhv_checkpoint_flag_loop(obj)
     local m = gMarioStates[0]
-    if obj.oAction == 0 then
-        if obj_check_if_collided_with_object(obj, m.marioObj) ~= 0 then
-            m.spawnInfo.startPos.x, m.spawnInfo.startPos.y, m.spawnInfo.startPos.z = obj.oPosX, obj.oPosY, obj.oPosZ
-            m.spawnInfo.startAngle.y = obj.oFaceAngleYaw
-            cur_obj_play_sound_1(SOUND_GENERAL_COLLECT_1UP)
-            obj.oAction = 1
-        end
+    if is_bubbled(m) then return end
+
+    if lateral_dist_between_objects(obj, m.marioObj) < 100 and obj ~= last_touched_checkpoint then
+        last_touched_checkpoint = obj
+        stored_2nd_byte = obj.oBehParams2ndByte
+
+        local ltc = last_touched_checkpoint
+        play_sound(SOUND_MENU_CHANGE_SELECT + (1 << 16), {x = ltc.oPosX, y = ltc.oPosY, z = ltc.oPosZ})
+        spawn_non_sync_object(id_bhvSparkle, E_MODEL_SPARKLES, ltc.oPosX, ltc.oPosY, ltc.oPosZ,
+        function (o)
+            obj_scale(o, 5)
+        end)
     end
 end
+
+hook_event(HOOK_ON_SYNC_VALID,
+function ()
+    if not last_touched_checkpoint then return end
+
+    if obj_count_objects_with_behavior_id(bhvCheckpoint_Flag_MOP) > 0 then
+        local ltc = last_touched_checkpoint
+        local m = gMarioStates[0]
+        if ltc.behavior == bhvCheckpoint_Flag_MOP and ltc.oBehParams2ndByte == stored_2nd_byte then
+            vec3f_set(m.pos, ltc.oPosX, ltc.oPosY, ltc.oPosZ)
+        end
+    end
+end)
 """,
     """
 const BehaviorScript bhvCheckpoint_Flag_MOP[] = {
@@ -1112,50 +1222,56 @@ const BehaviorScript bhvFlipswitch_Panel_MOP[] = {
 register_mop_behavior(
     "bhvFlipswitch_Panel_StarSpawn_MOP",
     """
+function bhv_flipswitch_panel_starspawn_init(obj)
+    obj.oFlags = OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE
+    obj.oHealth = 0
+end
+
 function bhv_flipswitch_panel_starspawn_loop(obj)
-    if not StarSpawned then
-        local flipswitches_count = obj_count_objects_with_behavior_id(bhvFlipswitch_Panel_MOP)
-        local flipswitches_active = 0
+    local amount_of_panels = obj_count_objects_with_behavior_id(bhvFlipswitch_Panel_MOP)
+    if amount_of_panels > obj.oHealth or obj.oHealth == 0 then
+        obj.oHealth = amount_of_panels
+        return
+    end
 
-        local curr_obj = obj_get_first_with_behavior_id(bhvFlipswitch_Panel_MOP)
-        while curr_obj do
-            if curr_obj.oAnimState == 1 then
-                flipswitches_active = flipswitches_active + 1
-            end
-            curr_obj = obj_get_next_with_same_behavior_id(curr_obj)
+    obj.oHiddenStarTriggerCounter = 0
+    local panel = obj_get_first_with_behavior_id(bhvFlipswitch_Panel_MOP)
+    while panel do
+        if panel.oAnimState == 1 then
+            obj.oHiddenStarTriggerCounter = obj.oHiddenStarTriggerCounter + 1
         end
+        panel = obj_get_next_with_same_behavior_id(panel)
+    end
 
-        if flipswitches_active == flipswitches_count and flipswitches_count > 0 then
-            spawn_red_coin_cutscene_star(obj.oPosX, obj.oPosY, obj.oPosZ)
-            StarSpawned = true
-        end
+    if obj.oHiddenStarTriggerCounter == obj.oHealth and not StarSpawned then
+        spawn_red_coin_cutscene_star(obj.oPosX, obj.oPosY, obj.oPosZ)
+        StarSpawned = true
+        obj_mark_for_deletion(obj)
     end
 end
+
+hook_event(HOOK_ON_OBJECT_UNLOAD,
+function (obj)
+    if obj_has_behavior_id(obj, bhvFlipswitch_Panel_StarSpawn_MOP) == 1 and obj.oHiddenStarTriggerCounter ~= obj.oHealth and not StarSpawned then
+        local starspawn_obj = obj_get_first_with_behavior_id(bhvFlipswitch_Panel_StarSpawn_MOP)
+        spawn_red_coin_cutscene_star(starspawn_obj.oPosX, starspawn_obj.oPosY, starspawn_obj.oPosZ)
+        StarSpawned = true
+    end
+end)
 """,
     """
 const BehaviorScript bhvFlipswitch_Panel_StarSpawn_MOP[] = {
     BEGIN(OBJ_LIST_DEFAULT),
     ID(id_bhvNewId),
     OR_INT(oFlags, OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE),
+    CALL_NATIVE(bhv_flipswitch_panel_starspawn_init),
     BEGIN_LOOP(),
     CALL_NATIVE(bhv_flipswitch_panel_starspawn_loop),
     END_LOOP(),
 };
-
-const BehaviorScript bhvFlipswitch_Panel_MOP[] = {
-    BEGIN(OBJ_LIST_SURFACE),
-    ID(id_bhvNewId),
-    OR_INT(oFlags, OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE ),
-    LOAD_COLLISION_DATA(col_Flipswitch_Panel_MOP_0x7daf78),
-    SET_FLOAT(oCollisionDistance,1024),
-    CALL_NATIVE(bhv_flipswitch_panel_init),
-    BEGIN_LOOP(),
-    CALL_NATIVE(bhv_flipswitch_panel_loop),
-    CALL_NATIVE(load_object_collision_model),
-    END_LOOP(),
-};
 """,
     [],
+    ["bhvFlipswitch_Panel_MOP"],
 )
 
 register_mop_behavior(
@@ -1163,26 +1279,25 @@ register_mop_behavior(
     """
 local E_MODEL_BLARGG = smlua_model_util_get_id("blargg_geo")
 local sBlarggHitbox = {
-    interactType = INTERACT_MR_BLIZZARD,
+    interactType = INTERACT_DAMAGE,
     downOffset = 0,
     damageOrCoinValue = 1,
-    health = 1,
+    health = 0,
     numLootCoins = 0,
-    radius = 150,
-    height = 250,
-    hurtboxRadius = 150,
-    hurtboxHeight = 250,
+    radius = 200,
+    height = 235,
+    hurtboxRadius = 200,
+    hurtboxHeight = 110,
 }
 
 local function blargg_check_mario_collision(obj)
-    if obj.oDistanceToMario < 300 and math.abs(obj.oPosY - gMarioStates[0].pos.y) < 300 then
-        if (obj.oAction == BLARGG_ACT_CHASE or obj.oAction == BLARGG_ACT_SWIM) then
-            if gMarioStates[0].action & ACT_FLAG_AIR == 0 then
-                obj.oAction = BLARGG_ACT_KNOCKBACK
-                cur_obj_init_animation(ANM_attack)
-                cur_obj_play_sound_2(SOUND_OBJ2_PIRANHA_PLANT_BITE)
-            end
-        end
+    if obj.oInteractStatus & INT_STATUS_INTERACTED ~= 0 then
+        cur_obj_play_sound_2(SOUND_MOVING_LAVA_BURN)
+        obj.oInteractStatus = obj.oInteractStatus & ~INT_STATUS_INTERACTED
+        obj.oAction = BLARGG_ACT_KNOCKBACK
+        obj.oFlags = obj.oFlags & ~OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW
+        cur_obj_init_animation(ANM_swim)
+        obj.oBullyMarioCollisionAngle = obj.oMoveAngleYaw
     end
 end
 
@@ -1194,24 +1309,39 @@ local function blargg_act_swim(obj, m)
 end
 
 local function blargg_act_chase_mario(obj, m)
+    local homeX = obj.oHomeX
+    local posY = obj.oPosY
+    local homeZ = obj.oHomeZ
+
     obj.oFlags = obj.oFlags | OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW
+    obj.oMoveAngleYaw = obj.oFaceAngleYaw
     obj_turn_toward_object(obj, m.marioObj, 16, 4096)
+
     obj.oForwardVel = 10
-    if is_point_within_radius_of_mario(obj.oHomeX, obj.oHomeY, obj.oHomeZ, 5000) == 0 or m.floor.type == SURFACE_DEFAULT then
+    bhv_koopa_shell_flame_spawn(obj)
+
+    if is_point_within_radius_of_mario(homeX, posY, homeZ, 5000) == 0 or m.floor.type == SURFACE_DEFAULT then
         obj.oAction = BLARGG_ACT_SWIM
         cur_obj_init_animation(ANM_swim)
     end
 end
 
 local function blargg_act_knockback(obj, m)
+    if obj.oForwardVel < 10.0 and repack(obj.oVelY, "f", "L") == 0 then
+        obj.oForwardVel = 1.0
+        obj.oBullyKBTimerAndMinionKOCounter = obj.oBullyKBTimerAndMinionKOCounter + 1
+        obj.oFlags = obj.oFlags | OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW
+        obj.oMoveAngleYaw = obj.oFaceAngleYaw
+        obj_turn_toward_object(obj, m.marioObj, 16, 1280)
+    else
+        obj.header.gfx.animInfo.animFrame = 0
+    end
+
     if obj.oBullyKBTimerAndMinionKOCounter == 18 then
         obj.oAction = BLARGG_ACT_CHASE
         obj.oBullyKBTimerAndMinionKOCounter = 0
         cur_obj_init_animation(ANM_attack)
         cur_obj_play_sound_2(SOUND_OBJ2_PIRANHA_PLANT_BITE)
-    else
-        obj.oBullyKBTimerAndMinionKOCounter = obj.oBullyKBTimerAndMinionKOCounter + 1
-        obj_turn_toward_object(obj, m.marioObj, 16, 1280)
     end
 end
 
@@ -1220,7 +1350,9 @@ local function blargg_act_back_up(obj)
         obj.oFlags = obj.oFlags & ~OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW
         obj.oMoveAngleYaw = obj.oMoveAngleYaw + 0x8000
     end
+
     obj.oForwardVel = 5.0
+
     if obj.oTimer == 15 then
         obj.oMoveAngleYaw = obj.oFaceAngleYaw
         obj.oFlags = obj.oFlags | OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW
@@ -1228,11 +1360,17 @@ local function blargg_act_back_up(obj)
     end
 end
 
-local function blargg_step(obj)
-    local collisionFlags = object_step()
-    if collisionFlags & (OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW) == 0 and obj.oAction ~= BLARGG_ACT_KNOCKBACK then
+local function blargg_backup_check(obj, collisionFlags)
+    if collisionFlags & OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW == 0 and obj.oAction ~= BLARGG_ACT_KNOCKBACK then
+        obj.oPosX = obj.oBullyPrevX
+        obj.oPosZ = obj.oBullyPrevZ
         obj.oAction = BLARGG_ACT_BACKUP
     end
+end
+
+local function blargg_step(obj)
+    local collisionFlags = object_step()
+    blargg_backup_check(obj, collisionFlags)
 end
 
 function bhv_blargg_init(obj)
@@ -1247,13 +1385,17 @@ end
 
 function bhv_blargg_loop(obj)
     obj.oIntangibleTimer = 0
+    obj.oBullyPrevX = obj.oPosX
+    obj.oBullyPrevY = obj.oPosY
+    obj.oBullyPrevZ = obj.oPosZ
     blargg_check_mario_collision(obj)
     local m = gMarioStates[0]
     switch (obj.oAction, {
         [BLARGG_ACT_SWIM] = function () blargg_act_swim(obj, m) blargg_step(obj) end,
         [BLARGG_ACT_CHASE] = function () blargg_act_chase_mario(obj, m) blargg_step(obj) end,
         [BLARGG_ACT_KNOCKBACK] = function () blargg_act_knockback(obj, m) blargg_step(obj) end,
-        [BLARGG_ACT_BACKUP] = function () blargg_act_back_up(obj) blargg_step(obj) end,
+        [BLARGG_ACT_BACKUP] = function () obj.oForwardVel = 10.0 blargg_act_back_up(obj) blargg_step(obj) end,
+        [BULLY_ACT_DEATH_PLANE_DEATH] = function () obj.activeFlags = ACTIVE_FLAG_DEACTIVATED end,
     })
 end
 """,
@@ -1293,8 +1435,24 @@ local sBlarggFriendlyHitbox = {
 local function blargg_friendly_explode(obj, m)
     set_mario_action(m, ACT_WALKING, 0)
     mario_stop_riding_object(m)
-    spawn_object(obj, E_MODEL_EXPLOSION, id_bhvExplosion)
+
     obj_mark_for_deletion(obj)
+    if obj.oTimer < 5 then
+        local scale = repack(obj.oTimer * 0.2, "I", "f")
+        cur_obj_scale(scale)
+    else
+        local explosion = spawn_object(obj, E_MODEL_EXPLOSION, id_bhvExplosion)
+        if explosion then
+            explosion.oGraphYOffset = explosion.oGraphYOffset + 100
+        end
+
+        spawn_non_sync_object(
+            get_id_from_behavior(obj.behavior),
+            E_MODEL_FRIENDLY_BLARGG,
+            obj.oHomeX, obj.oHomeY, obj.oHomeZ,
+            nil)
+        obj.activeFlags = obj.activeFlags | ACTIVE_FLAG_DEACTIVATED
+    end
 end
 
 function bhv_friendly_blargg_init(obj)
@@ -1304,20 +1462,32 @@ function bhv_friendly_blargg_init(obj)
 end
 
 function bhv_blargg_friendly_loop(obj)
-    if obj.oAction == FRIENDLY_BLARGG_ACT_IDLE then
+    local action = obj.oAction
+    if action == FRIENDLY_BLARGG_ACT_IDLE then
+        cur_obj_update_floor_and_walls()
+        cur_obj_if_hit_wall_bounce_away()
         if obj.oInteractStatus & INT_STATUS_INTERACTED ~= 0 then
             obj.oAction = FRIENDLY_BLARGG_ACT_BEING_RIDDEN
         end
         cur_obj_move_standard(-20)
-    elseif obj.oAction == FRIENDLY_BLARGG_ACT_BEING_RIDDEN then
+    elseif action == FRIENDLY_BLARGG_ACT_BEING_RIDDEN then
         local m = gMarioStates[0]
         obj_copy_pos(obj, m.marioObj)
         local floor = cur_obj_update_floor_height_and_get_floor()
-        if floor and floor.type ~= SURFACE_BURNING then
+        if 5.0 > math.abs(obj.oPosY - obj.oFloorHeight) then
+            if floor and floor.type == SURFACE_BURNING then
+                bhv_koopa_shell_flame_spawn(obj)
+            else
+                blargg_friendly_explode(obj, m)
+            end
+        else
             blargg_friendly_explode(obj, m)
-        end
-        if obj.oInteractStatus & INT_STATUS_STOP_RIDING ~= 0 then
-            obj.oAction = FRIENDLY_BLARGG_ACT_IDLE
+            obj.oFaceAngleYaw = m.marioObj.oMoveAngleYaw
+            if obj.oInteractStatus & INT_STATUS_STOP_RIDING ~= 0 then
+                obj_mark_for_deletion(obj)
+                spawn_mist_particles()
+                obj.oAction = FRIENDLY_BLARGG_ACT_IDLE
+            end
         end
     end
     obj.oInteractStatus = 0

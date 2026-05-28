@@ -1055,12 +1055,29 @@ class ExtractionPipeline:
             mop_c_chunks = []
             mop_actor_folders = set()
 
-            for name, mop_data in MOP_BEHAVIORS.items():
-                if name in ctx.found_mops:
-                    mop_lua_chunks.append(f"-- {mop_data.name}\n{mop_data.lua_code}\n")
-                    mop_c_chunks.append(f"// {mop_data.name}\n{mop_data.behavior_code}\n")
-                    if mop_data.model_folders:
-                        mop_actor_folders.update(mop_data.model_folders)
+            # Expand included behaviors to include dependencies
+            included = set(ctx.found_mops)
+            added = True
+            while added:
+                added = False
+                for name in list(included):
+                    bhv = MOP_BEHAVIORS.get(name)
+                    if not bhv or bhv.dependencies:
+                        continue
+                    for dep in bhv.dependencies:
+                        if dep in included:
+                            continue
+                        included.add(dep)
+                        added = True
+
+            for name in included:
+                mop_data = MOP_BEHAVIORS.get(name)
+                if not mop_data:
+                    continue
+                mop_lua_chunks.append(f"-- {mop_data.name}\n{mop_data.lua_code}\n")
+                mop_c_chunks.append(f"// {mop_data.name}\n{mop_data.behavior_code}\n")
+                if mop_data.model_folders:
+                    mop_actor_folders.update(mop_data.model_folders)
 
             mop_lua_chunks[-1] = mop_lua_chunks[-1].rstrip() + "\n"
             ctx.txt.write_lua(mop_lua_chunks, "mop.lua")
