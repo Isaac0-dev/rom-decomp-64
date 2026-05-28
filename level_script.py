@@ -270,7 +270,7 @@ def parse_line(rom, seg_offset, seg_phys_start):
             rom.seek(prev_offset + 4, 0)
 
     if command < 0 or command >= len(parse_command_table):
-        debug_fail(
+        debug_print(
             f"WARNING: UNRECOGNISED LEVEL CMD OP {command:02X} at phys: 0x{curr_phys:08x}, seg: 0x{seg_phys_start:08x}, offset: 0x{prev_offset - seg_offset:08x}"
         )
         return False, ""
