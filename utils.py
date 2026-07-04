@@ -90,6 +90,10 @@ def get_internal_name(rom_bytes: bytes):
     return name[:n]
 
 
+def ensure_single_trailing_newline(content: str) -> str:
+    return content.rstrip() + "\n"
+
+
 def get_vanilla_sm64_rom() -> Optional[bytes]:
     global vanilla_rom, vanilla_rom_path
     if vanilla_rom is not None:

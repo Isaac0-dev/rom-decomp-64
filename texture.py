@@ -875,7 +875,7 @@ class TextureProcessor(BaseProcessor):
             if not record.is_palette:
                 debug_print(f"Texture {name} has no segment_data, skipping PNG write.")
 
-        u8_buffer = f'ALIGNED8 Texture {name} = {{\n#include "{path}{name}.inc.c"\n}};\n\n'
+        u8_buffer = f'ALIGNED8 Texture {name} = {{\n#include "{path}{name}.inc.c"\n}};'
 
         # Write to raw.log and model.inc.c cached handle
         if self.txt:
@@ -883,7 +883,7 @@ class TextureProcessor(BaseProcessor):
 
         if palette is not None:
             pal_str = ", ".join(f"0x{b:02X}" for b in palette)
-            u8_palette = f"ALIGNED8 const u8 {name}_pal[] = {{\n    {pal_str}\n}};\n\n"
+            u8_palette = f"ALIGNED8 const u8 {name}_pal[] = {{\n    {pal_str}\n}};"
             if self.txt:
                 self.txt.write(ctx, "texture_dl", name.replace("texture", "dl"), u8_palette)
             u8_buffer += u8_palette

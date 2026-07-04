@@ -183,7 +183,7 @@ def parse_trajectory(segmented_addr: int, sTxt: Any, name: Optional[str] = None)
     output_lines.append("    TRAJECTORY_END(),")
     output_lines.append("};")
 
-    final_output = "\n".join(output_lines) + "\n"
+    final_output = "\n".join(output_lines)
     sTxt.write(ctx, "trajectory", name, final_output)
     return name
 

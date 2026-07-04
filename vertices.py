@@ -99,7 +99,7 @@ class VertexProcessor(BaseProcessor):
                 output_lines.append("    /* TRUNCATED DATA */")
 
             output_lines.append("};")
-            output_str = "\n".join(output_lines) + "\n\n"
+            output_str = "\n".join(output_lines)
             record.script_text = output_str
 
         if self.ctx.txt and output_str:

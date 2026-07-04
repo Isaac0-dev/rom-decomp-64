@@ -177,7 +177,7 @@ class LightProcessor(BaseProcessor):
             debug_fail(f"Could not unpack light data at 0x{segmented_addr:08X}: {e}")
             output_lines.append("    /* ERROR: Could not unpack light data */")
 
-        output_str = "\n".join(output_lines) + "\n"
+        output_str = "\n".join(output_lines)
 
         self.ctx.db.lights[db_key] = LightRecord(
             seg_addr=segmented_addr,

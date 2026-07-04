@@ -16,6 +16,7 @@ from rom_database import (
     GlobalSegRecord,
     RomDatabase,
 )
+from utils import ensure_single_trailing_newline
 
 if TYPE_CHECKING:
     from segment import CustomBytesIO
@@ -1079,7 +1080,7 @@ class ExtractionPipeline:
                 if mop_data.model_folders:
                     mop_actor_folders.update(mop_data.model_folders)
 
-            mop_lua_chunks[-1] = mop_lua_chunks[-1].rstrip() + "\n"
+            mop_lua_chunks[-1] = ensure_single_trailing_newline(mop_lua_chunks[-1])
             ctx.txt.write_lua(mop_lua_chunks, "mop.lua")
             ctx.txt.create_file("data/behavior_data.c", content="\n".join(mop_c_chunks))
 
@@ -1090,6 +1091,7 @@ class ExtractionPipeline:
         for path, contents in filepath_to_content.items():
             # Join all chunks of code for this specific file
             full_text = "\n\n".join(contents)
+            full_text = ensure_single_trailing_newline(full_text)
             self.txt.create_file(path, full_text)
 
     # ------------------------------------------------------------------
