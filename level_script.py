@@ -237,6 +237,7 @@ def level_script_check_match(cmd_list):
 
 
 def expand_level_script_into(dest: LevelRecord, indent: int, src: LevelRecord, index: int):
+    assert len(src.commands) > 0, "Source script must have at least one command"
     command_count = 0
     for command in src.commands:
         command.indent = indent

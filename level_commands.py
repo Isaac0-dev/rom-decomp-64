@@ -1,3 +1,5 @@
+from typing import Optional
+
 import level_script
 import struct
 from context import ctx
@@ -528,6 +530,18 @@ def FREE_LEVEL_POOL(values):
     return format_output("FREE_LEVEL_POOL", [])
 
 
+"""
+SM64 Rom Manager stores area-specific data in its own ROM range, loaded into segment 0x0E when that area is loaded.
+While Rom Manager usually loads this data after parsing the level script, we load it on sight for broader compatibility.
+To support hacks that rely on Rom Manager’s behavior, we toggle between segment 0x0E ranges.
+"""
+
+
+_area_0e_start: Optional[int] = None
+_area_0e_end: Optional[int] = None
+area_snapshot_0e = None
+
+
 def is_per_area_bank_0e(segData):
     if len(segData) < 0x6000:
         return False
@@ -541,7 +555,11 @@ def is_per_area_bank_0e(segData):
 
 
 def set_area_segmented_0e(areaID, segData):
+    global _area_0e_start, _area_0e_end
+
     if not is_per_area_bank_0e(segData):
+        _area_0e_start = None
+        _area_0e_end = None
         return
 
     offset = 0x5F00 + areaID * 0x10
@@ -560,7 +578,27 @@ def set_area_segmented_0e(areaID, segData):
         | segData[offset + 3]
     )
 
-    load_segment(0x0E, start, end, False)
+    _area_0e_start = start
+    _area_0e_end = end
+
+
+def apply_area_segmented_0e() -> bool:
+    global area_snapshot_0e
+    if _area_0e_start is None or _area_0e_end is None:
+        return False
+
+    from segment import SegmentSnapshot
+
+    area_snapshot_0e = SegmentSnapshot()
+    load_segment(0x0E, _area_0e_start, _area_0e_end, False)
+    return True
+
+
+def restore_area_segmented_0e():
+    global area_snapshot_0e
+    if area_snapshot_0e is not None:
+        area_snapshot_0e.restore()
+        area_snapshot_0e = None
 
 
 def AREA(values):
@@ -577,9 +615,13 @@ def AREA(values):
     ctx.curr_area = index
 
     from geo_layout import parse_geo_layout
+
+    had_area_0e = apply_area_segmented_0e()
     geo_rec = parse_geo_layout(
         geo, ctx.txt, context_prefix=ctx.current_context_prefix, is_level=True
     )
+    if had_area_0e:
+        restore_area_segmented_0e()
 
     params = [
         index,
@@ -612,7 +654,10 @@ def LOAD_MODEL_FROM_DL(values):
 
     from display_list import parse_display_list
 
+    had_area_0e = apply_area_segmented_0e()
     dl_rec = parse_display_list(dl, ctx.txt, ctx.current_context_prefix)
+    if had_area_0e:
+        restore_area_segmented_0e()
 
     from model_ids import resolve_model_id
 
@@ -645,7 +690,10 @@ def LOAD_MODEL_FROM_GEO(values):
 
     from geo_layout import parse_geo_layout
 
+    had_area_0e = apply_area_segmented_0e()
     geo_rec = parse_geo_layout(geo, ctx.txt, context_prefix=ctx.current_context_prefix)
+    if had_area_0e:
+        restore_area_segmented_0e()
 
     comment = ""
     seg_num = segment_from_addr(geo)
@@ -845,7 +893,11 @@ def TERRAIN(values):
     _, _, _ = CMD_BBH(values)
     collision = CMD_PTR(values)
 
+    had_area_0e = apply_area_segmented_0e()
     collision_rec = parse_collision(collision, ctx.txt, context_prefix=ctx.current_context_prefix)
+    if had_area_0e:
+        restore_area_segmented_0e()
+
     params = [collision_rec]
     return format_output("TERRAIN", params)
 
