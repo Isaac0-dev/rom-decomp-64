@@ -14,7 +14,7 @@ let emulator;
 self.onmessage = async (e) => {
     console.log('[Worker] Received message in handler:', e.data);
     const { type, data } = e.data;
-    
+
     if (type === 'init') {
         console.log('[Worker] Initializing...');
         await init();
@@ -26,19 +26,19 @@ self.onmessage = async (e) => {
 
 const pythonFiles = [
     'browser_bridge.py',
-    'extract.py', 'pipeline.py', 'utils.py', 'context.py', 'rom_database.py', 
-    'segment.py', 'texture.py', 'geo_layout.py', 'display_list.py', 
-    'level_script.py', 'level_commands.py', 'collision.py', 'audio.py', 
-    'disassemble_sound.py', 'aifc_decode.py', 'behavior.py', 
-    'behavior_hashes.py', 'model_ids.py', 'mop.py', 'movtex.py', 
-    'rooms.py', 'scroll_targets.py', 'trajectory.py', 'vertices.py', 
-    'lights.py', 'constants.py', 'byteio.py', 'binary_to_png.py', 
-    'gbi_defines.py', 'db_passes.py', 'deferred_output.py', 
-    'optimization_passes.py', 'output_manager.py', 'serialization_helpers.py', 
-    'vanilla_matcher.py', 'dynos_builtins.py', 'address_map.py', 
-    'address_map_typed.py', 'script_definitions.py', 'n64_host.py', 'bps.py', 
-    'base_processor.py', 'lua_modules.py', 'sm64.us.map', 'gen_anon_hashes.py', 
-    'macro_objects.py', 'segment2_extractor.py', 'text_export.py',
+    'extract.py', 'pipeline.py', 'utils.py', 'context.py', 'rom_database.py',
+    'segment.py', 'texture.py', 'geo_layout.py', 'display_list.py',
+    'level_script.py', 'level_commands.py', 'collision.py', 'audio.py',
+    'disassemble_sound.py', 'aifc_decode.py', 'behavior.py',
+    'behavior_hashes.py', 'model_ids.py', 'mop.py', 'movtex.py',
+    'rooms.py', 'scroll_targets.py', 'trajectory.py', 'vertices.py',
+    'lights.py', 'constants.py', 'byteio.py', 'binary_to_png.py',
+    'gbi_defines.py', 'db_passes.py', 'deferred_output.py',
+    'optimization_passes.py', 'output_manager.py', 'serialization_helpers.py',
+    'vanilla_matcher.py', 'dynos_builtins.py', 'address_map.py',
+    'address_map_typed.py', 'script_definitions.py', 'n64_host.py', 'bps.py',
+    'base_processor.py', 'lua_modules.py', 'sm64.us.map', 'gen_anon_hashes.py',
+    'macro_objects.py', 'segment2_extractor.py', 'text_export.py', 'tweaks.py',
     'microcode/base.py', 'microcode/gbi0.py', 'microcode/gbi1.py', 'microcode/gbi2.py', 'microcode/gbi0_dkr.py', 'microcode/__init__.py',
     'compression_util/__init__.py', 'compression_util/compression.py', 'compression_util/rnc.py',
     'function_matching/extractor.py', 'function_matching/generator.py', 'function_matching/matcher.py', 'function_matching/mips_utils.py',
@@ -69,12 +69,12 @@ async function init() {
         });
         console.log('[Worker] Pyodide loaded.');
         self.postMessage({ type: 'status', data: 'Loading packages...' });
-        
+
         await pyodide.loadPackage('micropip');
         const micropip = pyodide.pyimport("micropip");
         await pyodide.loadPackage(['Pillow']);
         await micropip.install(['pypng']);
-        
+
         self.postMessage({ type: 'status', data: 'Fetching source files...' });
         const cacheBuster = '?v=' + Date.now();
         for (const file of pythonFiles) {
@@ -112,7 +112,7 @@ async function startExtraction() {
         console.log('[N64JS] Initializing Native Headless Emulator...');
         emulator.init(romBytes.toJs(), compressionType, romName);
     };
-    
+
     self.stepNativeEmulator = (cycles) => {
         return JSON.stringify(emulator.step(cycles));
     };
@@ -157,11 +157,11 @@ async def run_extraction():
         js_log("Running main extraction pipeline...")
         extract.main(filename_override='/input.z64', output_status_override=True)
         js_log("Main extraction pipeline finished.")
-        
+
         # Determine the actual output directory
         out_root = '/out'
         rom_dirs = [d for d in os.listdir(out_root) if os.path.isdir(os.path.join(out_root, d))]
-        
+
         target_dir = os.path.join(out_root, rom_dirs[0]) if rom_dirs else out_root
         js_log(f"Zipping results from: {target_dir}")
 
@@ -172,7 +172,7 @@ async def run_extraction():
                     abs_path = os.path.join(root, file)
                     rel_path = os.path.relpath(abs_path, target_dir)
                     zf.write(abs_path, rel_path)
-        
+
         memory_zip.seek(0)
         return memory_zip.getvalue()
     except Exception as e:
