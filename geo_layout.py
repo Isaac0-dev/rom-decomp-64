@@ -693,7 +693,7 @@ def G_BG(ls, i, s, c):
     bg_id = to_signed16(ls[0] & 0xFFFF)
     func_addr = ls[1]
     if func_addr == 0:
-        return CommandIR(0x19, [f"0x{bg_id:04X}"], name="GEO_BACKGROUND_COLOR"), False, i
+        return CommandIR(0x19, [f"0x{bg_id & 0xFFFF:04X}"], name="GEO_BACKGROUND_COLOR"), False, i
 
     func_name = resolve_geo_asm(func_addr, geo_background_callbacks) or "NULL"
     if func_name == "NULL" and any(
@@ -701,7 +701,7 @@ def G_BG(ls, i, s, c):
     ):
         func_name = "geo_skybox_main"
 
-    bg_name = f"0x{bg_id:04X}"
+    bg_name = f"0x{bg_id & 0xFFFF:04X}"
     if bg_id == 10:
         bg_name = get_current_skybox() or bg_name
 
@@ -712,9 +712,10 @@ def G_NOP_1A(ls, i, s, c):
     return CommandIR(0x1A, [], name="GEO_NOP_1A"), False, i
 
 
+# Unused command (not supported by coop)
 def G_COPY_VIEW(ls, i, s, c):
     index = to_signed16(ls[0] & 0xFFFF)
-    return CommandIR(0x1B, [index], name="GEO_COPY_VIEW"), False, i
+    return CommandIR(0x1B, [index], name="// GEO_COPY_VIEW"), False, i
 
 
 def G_HELD_OBJECT(ls, i, s, c):
