@@ -11,6 +11,7 @@ from segment import (
     segmented_to_virtual,
     get_segment,
     segment_from_addr,
+    sSegments,
 )
 from rom_database import CommandIR, Parameter
 
@@ -774,12 +775,22 @@ def OBJECT_WITH_ACTS(values):
         },
     )
 
+    # Temporarily load seg 0x0E range so the OBJECT snapshot captures it
+    if _area_0e_start is not None and _area_0e_end is not None:
+        saved_0e = sSegments.pop(0x0E, None)
+        load_segment(0x0E, _area_0e_start, _area_0e_end, False)
+
     ret = None
     if is_object:
         ret = format_output("OBJECT", params, take_snapshot=True)
     else:
         params.append(format_param_hex("acts", acts, 1))
         ret = format_output("OBJECT_WITH_ACTS", params, take_snapshot=True)
+
+    if _area_0e_start is not None and _area_0e_end is not None:
+        sSegments.pop(0x0E, None)
+        if saved_0e is not None:
+            sSegments[0x0E] = saved_0e
 
     # Empty objects
     # these seem to be common in editor hacks

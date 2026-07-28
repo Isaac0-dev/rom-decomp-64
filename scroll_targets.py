@@ -49,11 +49,11 @@ def _decode_rm_scroll(posX, posY, posZ, behParam):
     return {
         "variant": "rm",
         "raw_addr": behParam,
-        "addr": behParam & 0xFFFFFFF0,
+        "addr": behParam,
         "axis": axis_map.get(axis_bits, f"unknown(0x{axis_bits:04x})"),
         "type": type_map.get(type_bits, f"unknown(0x{type_bits:04x})"),
         "cycle": posY & 0xFF,
-        "num_verts": posX,
+        "num_verts": posX & 0xFFFF,
         "speed": posZ,
     }
 
