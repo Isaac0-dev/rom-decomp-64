@@ -785,9 +785,6 @@ def OBJECT_WITH_ACTS(values):
     # these seem to be common in editor hacks
     if (
         model == 0
-        and posX == 0
-        and posY == 0
-        and posZ == 0
         and angleX == 0
         and angleY == 0
         and angleZ == 0
