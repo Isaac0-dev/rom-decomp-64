@@ -35,7 +35,7 @@ def main():
             if e.stderr:
                 sys.stderr.write(e.stderr)
             print(f"Error extracting {f}, continuing...\n")
-            results.append((f, e.returncode))
+            results.append((f, 0 if e.returncode == 1 else 100))
             continue
 
     print("Finished extractions. Results:")
