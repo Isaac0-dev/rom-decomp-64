@@ -99,6 +99,7 @@ def build_star_position_tweaks():
 
 
 def write_tweaks():
+    tweaks = []
     if ctx.db.meta.hack_type == "SM64 Editor" or ctx.db.meta.hack_type == "SM64 Rom Manager":
         # If we didn't see any modification to the entry level, some hacks
         # put their entry level adjustment at 0x6D6A
@@ -130,8 +131,7 @@ def write_tweaks():
                 ctx.rom[0xB3523 : 0xB3523 + 1], "big"
             )
 
-    tweaks = []
-    tweaks += build_star_position_tweaks()
+        tweaks += build_star_position_tweaks()
     tweaks += ctx.level_values.get_tweaks_lua()
     tweaks += ctx.behavior_values.get_tweaks_lua()
     if tweaks:
