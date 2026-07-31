@@ -356,7 +356,7 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
     return ir_list
 
 
-def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int]:
+def parse_collision_data_to_ir(rom: CustomBytesIO, is_behavior: bool) -> Tuple[List[CommandIR], int]:
     ir_list = []
     total_surfaces = 0
     x_coords = []
@@ -404,22 +404,40 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
             continue
         break
 
-    # Check if the level is 2D using averages
-    if len(x_coords) > 0:
-        avg_x = sum(x_coords) / len(x_coords)
-        avg_z = sum(z_coords) / len(z_coords)
-        mad_x = sum(abs(x - avg_x) for x in x_coords) / len(x_coords)
-        mad_z = sum(abs(z - avg_z) for z in z_coords) / len(z_coords)
-        left = min(mad_x, mad_z) if min(mad_x, mad_z) > 0 else 1
-        right = max(mad_x, mad_z)
-        is_2d = (right / left) > 5.0
-        if is_2d:
-            # Get highest and lowest X and Z
-            min_x = min(x_coords)
-            max_x = max(x_coords)
-            min_z = min(z_coords)
-            max_z = max(z_coords)
+    # Check if the level is 2D by checking occupied chunks
+    # This strategy works around the problem of having large death planes
+    if not is_behavior and len(x_coords) > 0:
+        min_x = min(x_coords)
+        max_x = max(x_coords)
+        min_z = min(z_coords)
+        max_z = max(z_coords)
 
+        # Divide the world into 500x500 unit chunks
+        GRID_SIZE = 500
+
+        occupied_x = set()
+        occupied_z = set()
+
+        for x, z in zip(x_coords, z_coords):
+            occupied_x.add(x // GRID_SIZE)
+            occupied_z.add(z // GRID_SIZE)
+
+        # Count how many chunks have any geometry in them
+        # (also prevent division by zero)
+        chunks_x = max(len(occupied_x), 1)
+        chunks_z = max(len(occupied_z), 1)
+
+        # Find the longest axis of the map
+        wide_span = max(chunks_x, chunks_z)
+        thin_span = min(chunks_x, chunks_z)
+
+        # Compare how different they are
+        ratio = wide_span / thin_span
+
+        # A 2D level will have a high ratio of occupied chunks
+        # sanity check that the level is actually a level (occupies enough chunks)
+        is_2d = (ratio > 4.0 and wide_span >= 6)
+        if is_2d:
             from lua_modules import register_2d_area
 
             register_2d_area(
@@ -430,7 +448,7 @@ def parse_collision_data_to_ir(rom: CustomBytesIO) -> Tuple[List[CommandIR], int
                 ctx.level_values.highest_vtx_height,
                 min_z,
                 max_z,
-                mad_x > mad_z,
+                chunks_x > chunks_z, # Determine which axis is the long one
             )
 
     return ir_list, total_surfaces
@@ -471,7 +489,7 @@ class CollisionProcessor(BaseProcessor):
 
         rom = CustomBytesIO(data)
         rom.seek(offset)
-        commands_ir, surface_count = parse_collision_data_to_ir(rom)
+        commands_ir, surface_count = parse_collision_data_to_ir(rom, is_behavior)
 
         name = f"collision_0x{segmented_addr:08X}"
         if is_behavior:
