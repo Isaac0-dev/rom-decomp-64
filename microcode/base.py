@@ -30,6 +30,7 @@ class Microcode(ABC):
         self.commands = {}
         self.vertex_stride = 2  # Default for GBI1
         self.parent_dl = None
+        self.version_str = ""
 
     def get_handler(self, command):
         opcode = (command >> 24) & 0xFF

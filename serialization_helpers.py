@@ -273,7 +273,7 @@ def serialize_behavior(bhv_name: str, commands: List[CommandIR], db: RomDatabase
 
 
 def serialize_gfx_command(
-    cmd: CommandIR, db: RomDatabase, location: LevelAreaContext, microcode_name: str = "GBI0"
+    cmd: CommandIR, db: RomDatabase, location: LevelAreaContext, microcode_name: str = "F3D"
 ) -> str:
     """Convert a Gfx (Display List) CommandIR back into a C macro string."""
     ucode = create_microcode(microcode_name)
@@ -285,7 +285,7 @@ def serialize_gfx_layout(
     commands: List[CommandIR],
     db: RomDatabase,
     location: LevelAreaContext,
-    microcode_name: str = "GBI0",
+    microcode_name: str = "F3D",
 ) -> str:
     """Serialize a full DisplayListRecord into a C file string."""
     ucode = create_microcode(microcode_name)

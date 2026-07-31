@@ -577,7 +577,6 @@ class ExtractionPipeline:
                 if mc_match:
                     mapped = mc_match.group(2)
                     version = mc_match.group(3)
-                    print(f"Microcode detected by n64js: {version} -> {mapped}")
                     if mapped and mapped.lower() != "unknown":
                         set_microcode(mapped)
                         self.db.meta.microcode = mapped

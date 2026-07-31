@@ -89,10 +89,19 @@ def probe_microcode(segment_data: bytes, offset: int) -> Optional[str]:
         return None
     cmd0 = int.from_bytes(segment_data[offset : offset + 4], "big")
     opcode = (cmd0 >> 24) & 0xFF
-    if opcode in (0xDE, 0xDF, 0x09, 0x0A):
+
+    # GBI2 (F3DEX2) unique opcodes
+    if opcode in (
+        0x0A, 0x0B, 0x0C, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA,
+        0xDB, 0xDC, 0xDD, 0xDE, 0xDF, 0xE0, 0xE1, 0xE2,
+        0xE3, 0xF1,
+    ):
         return "F3DEX2"
-    if opcode in (0x06, 0xB8):
+
+    # GBI0/GBI0DKR (F3D) unique opcode
+    if opcode == 0x0F:
         return "F3D"
+
     return None
 
 
@@ -130,7 +139,7 @@ def parse_display_list_from_data(
                 or (hasattr(handler, "__name__") and handler.__name__ == "execute_unknown")
             ):
                 break
-        return dis.commands, dis.side_effects, current_microcode.__class__.__name__
+        return dis.commands, dis.side_effects, current_microcode.version_str
     finally:
         current_microcode = old
 

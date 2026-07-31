@@ -39,6 +39,8 @@ def version_str_to_microcode_class(version_str):
     else:
         res = GBI0()
 
+    print(f"Loaded microcode: {type(res).__name__} :: {version_str}")
+    res.version_str = version_str
     _microcode_cache[version_str] = res
     return res
 
