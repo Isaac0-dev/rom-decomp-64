@@ -1,5 +1,6 @@
 import os
 import hashlib
+import re
 import struct
 from typing import Any, List, Optional, Set, Tuple
 
@@ -263,6 +264,92 @@ def detect_bank_source(
     return (None, 0)
 
 
+SEQUENCE_NAME_TABLE_OFFSET = 0x7F1000
+SEQUENCE_NAME_TABLE_COUNT = 70
+UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def parse_sequence_name_table(rom_bytes: bytes) -> List[Optional[str]]:
+    names: List[Optional[str]] = []
+    p = SEQUENCE_NAME_TABLE_OFFSET
+    for _ in range(SEQUENCE_NAME_TABLE_COUNT):
+        if p >= len(rom_bytes):
+            names.append(None)
+            continue
+
+        length = rom_bytes[p]
+        if length in (0x00, 0xFF):
+            names.append(None)
+            p += 1
+            continue
+
+        end = p + 1 + length
+        if end > len(rom_bytes):
+            names.append(None)
+            break
+
+        name_bytes = rom_bytes[p + 1 : end]
+        if all(32 <= c < 127 for c in name_bytes):
+            names.append(name_bytes.decode("ascii"))
+        else:
+            names.append(None)
+        p = end
+
+    return names
+
+
+def clean_sequence_name(name: Optional[str], seq_id: int) -> str:
+    if not name:
+        return f"seq_{seq_id:02X}"
+
+    name = name.strip()
+    if name.lower().endswith(".m64"):
+        name = name[:-4]
+
+    name = UNSAFE_FILENAME_CHARS.sub("_", name)
+    name = name.rstrip(". ")
+    name = name.replace("\\", "\\\\").replace("'", "\\'")
+    return name or f"seq_{seq_id:02X}"
+
+
+def get_sequence_volume(data: bytes) -> Optional[int]:
+    pos = 0
+    n = len(data)
+
+    # Mini sequence VM parser just to find the volume (from the .m64 sequence)
+    while pos < n:
+        b = data[pos]
+
+        if b == 0xDB:  # seq_setvol
+            if pos + 1 < n:
+                return data[pos + 1]
+            return None
+
+        # commands without arguments
+        if b in (0xFF, 0xFE, 0xF1, 0xF7, 0xD4):
+            pos += 1
+        elif (b & 0xF0) == 0x90:  # seq_startchannel
+            pos += 3
+        elif (b & 0xF0) in (0x00, 0x50, 0x70, 0x80):  # testchdisabled/subvariation/setvariation/getvariation
+            pos += 1
+        elif b in (0xFC, 0xFB, 0xFA, 0xF9, 0xF5, 0xD2, 0xD1):  # addr commands
+            pos += 3
+        elif b in (0xF8, 0xF2, 0xDF, 0xDE, 0xDD, 0xDC, 0xDA, 0xD5, 0xD0, 0xCC, 0xC9, 0xC8):
+            pos += 2
+        elif b == 0xFD:  # seq_delay
+            pos += 2
+            if pos < n and (data[pos - 1] & 0x80):
+                pos += 1
+        elif b in (0xD7, 0xD6):  # initchannels/disablechannels
+            pos += 3
+        elif b == 0xD3:  # seq_setmutebhv
+            pos += 2
+        else:
+            return None
+
+    return None
+
+
 extracted_offsets: List[int] = []
 extracted_headers_hash: Set[str] = set()
 
@@ -371,6 +458,7 @@ class AudioProcessor(BaseProcessor):
 
         rom_bytes = rom.getvalue()
         bank_source = detect_bank_source(rom_bytes, seq_count, header_offset)
+        seq_names = parse_sequence_name_table(rom_bytes)
 
         count = 0
 
@@ -405,8 +493,8 @@ class AudioProcessor(BaseProcessor):
                 continue
 
             bank_id = get_bank_id(rom_bytes, bank_source, i)
-            volume = 75
-            seq_name = f"seq_{i:02X}"
+            volume = get_sequence_volume(data) or 75
+            seq_name = clean_sequence_name(seq_names[i] if i < len(seq_names) else None, i)
 
             # Translate ext instruments
             if bank_id == 0x0C:

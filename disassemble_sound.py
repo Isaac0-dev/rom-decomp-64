@@ -782,6 +782,9 @@ def main(*Fargs):
                 filename = os.path.join(dir, entry.name + ".aiff")
                 write_aiff(entry, filename)
 
+    # Disable the sound bank files
+    return
+
     # Generate sound bank .json files
     os.makedirs(banks_out_dir, exist_ok=True)
     sound_bank_register_lines: list[str] = []
