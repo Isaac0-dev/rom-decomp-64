@@ -33,19 +33,21 @@ def _detect_editor_scroll_alt():
 
 def _decode_rm_scroll(posX, posY, posZ, behParam):
     axis_map = {
-        0xA000: "x",
-        0x8000: "y",
-        0x4000: "xPos",
-        0x2000: "yPos",
-        0x0000: "zPos",
+        0x00: "xPos",
+        0x20: "yPos",
+        0x40: "zPos",
+        0x80: "x",
+        0xA0: "y",
     }
     type_map = {
-        0x000: "normal",
-        0x100: "sine",
-        0x200: "jumping",
+        0x0: "normal",
+        0x1: "sine",
+        0x2: "jumping",
     }
-    axis_bits = posY & 0xF000
-    type_bits = posY & 0x0F00
+
+    scroll_beh = (posY >> 8) & 0xFF
+    axis_bits = scroll_beh & 0xE0
+    type_bits = scroll_beh & 0x1F
     return {
         "variant": "rm",
         "raw_addr": behParam,
@@ -58,7 +60,6 @@ def _decode_rm_scroll(posX, posY, posZ, behParam):
     }
 
 
-# TODO can replace assumed segment number by checking where vertices are loaded in the level
 recursion_safeguard = False
 
 
