@@ -93,7 +93,7 @@ def build_star_position_tweaks():
 
         x, y, z = coords
 
-        tweaks.append(f"vec3s_set(gLevelValues.starPositions.{name}, {x}, {y}, {z})\n")
+        tweaks.append(f"vec3f_set(gLevelValues.starPositions.{name}, {x}, {y}, {z})\n")
 
     return tweaks
 
