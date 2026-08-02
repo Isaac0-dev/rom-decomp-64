@@ -308,7 +308,7 @@ def clean_sequence_name(name: Optional[str], seq_id: int) -> str:
 
     name = UNSAFE_FILENAME_CHARS.sub("_", name)
     name = name.rstrip(". ")
-    name = name.replace("\\", "\\\\").replace("'", "\\'")
+    name = name.replace("\\", "\\\\")
     return name or f"seq_{seq_id:02X}"
 
 
@@ -540,7 +540,8 @@ class AudioProcessor(BaseProcessor):
 
             lua_lines.append(
                 f"smlua_audio_utils_replace_sequence("
-                f"0x{seq_rec.seq_id:02X}, 0x{seq_rec.bank_id:02X}, {seq_rec.volume}, '{seq_rec.name}')\n"
+                f"0x{seq_rec.seq_id:02X}, 0x{seq_rec.bank_id:02X}, "
+                f"{seq_rec.volume}, '{seq_rec.name.replace("'", "\\'")}')\n"
             )
 
         if self.txt:
