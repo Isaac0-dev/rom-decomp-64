@@ -530,7 +530,7 @@ def G_SWITCH(ls, i, s, c):
 def G_CAM(ls, i, s, c):
     t = to_signed16(ls[0] & 0xFFFF)
     x1, y1, z1, x2, y2, z2 = map(to_signed16, CMD_HHHHHH_unpack(ls[1:4]))
-    func = resolve_geo_asm(ls[4], geo_camera_callbacks) or "NULL"
+    func = resolve_geo_asm(ls[4], geo_camera_callbacks) or "geo_camera_main"
     return CommandIR(0x0F, [t, x1, y1, z1, x2, y2, z2, func], name="GEO_CAMERA"), False, i
 
 
