@@ -307,7 +307,7 @@ def JUMP_IF(values):
         ctx.level_script_tracker and ctx.level_script_tracker[-1] == "script_exec_level_table"
     )
     if is_level:
-        target_label = level_num_to_str.get(arg, f"level_{arg}")
+        target_label = level_num_to_str.get(arg, f"unknown_{arg}")
         ctx.curr_level = arg
         print(f"Processing level: {target_label}")
 

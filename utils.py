@@ -180,10 +180,10 @@ DEBUG: bool = False
 ROMHACK: bool = False
 
 level_num_to_str: Dict[int, str] = {
-    0: "none",
-    1: "unknown_1",
-    2: "unknown_2",
-    3: "unknown_3",
+    # 0: "none",
+    # 1: "unknown_1",
+    # 2: "unknown_2",
+    # 3: "unknown_3",
     4: "bbh",
     5: "ccm",
     6: "castle_inside",
@@ -212,14 +212,14 @@ level_num_to_str: Dict[int, str] = {
     29: "totwc",
     30: "bowser_1",
     31: "wmotr",
-    32: "unknown_32",
+    # 32: "unknown_32",
     33: "bowser_2",
     34: "bowser_3",
-    35: "unknown_35",
+    # 35: "unknown_35",
     36: "ttm",
-    37: "unknown_37",
-    38: "unknown_38",
-    39: "count",
+    # 37: "unknown_37",
+    # 38: "unknown_38",
+    # 39: "count",
 }
 
 level_name_to_int: Dict[str, int] = {v: k for k, v in level_num_to_str.items()}

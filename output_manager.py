@@ -143,7 +143,7 @@ class OutputManager:
             if ctx and ctx.curr_level != -1:
                 from utils import level_num_to_str
 
-                level = level_num_to_str.get(ctx.curr_level)
+                level = level_num_to_str.get(ctx.curr_level, f"unknown_{ctx.curr_level}")
                 if level and (
                     context.startswith(level + "_") or context == level or f"_{level}_" in context
                 ):
