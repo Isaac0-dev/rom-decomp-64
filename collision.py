@@ -356,7 +356,9 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
     return ir_list
 
 
-def parse_collision_data_to_ir(rom: CustomBytesIO, is_behavior: bool) -> Tuple[List[CommandIR], int]:
+def parse_collision_data_to_ir(
+    rom: CustomBytesIO, is_behavior: bool
+) -> Tuple[List[CommandIR], int]:
     ir_list = []
     total_surfaces = 0
     x_coords = []
@@ -436,7 +438,7 @@ def parse_collision_data_to_ir(rom: CustomBytesIO, is_behavior: bool) -> Tuple[L
 
         # A 2D level will have a high ratio of occupied chunks
         # sanity check that the level is actually a level (occupies enough chunks)
-        is_2d = (ratio > 4.0 and wide_span >= 6)
+        is_2d = ratio > 4.0 and wide_span >= 6
         if is_2d:
             from lua_modules import register_2d_area
 
@@ -448,7 +450,7 @@ def parse_collision_data_to_ir(rom: CustomBytesIO, is_behavior: bool) -> Tuple[L
                 ctx.level_values.highest_vtx_height,
                 min_z,
                 max_z,
-                chunks_x > chunks_z, # Determine which axis is the long one
+                chunks_x > chunks_z,  # Determine which axis is the long one
             )
 
     return ir_list, total_surfaces

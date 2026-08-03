@@ -66,6 +66,7 @@ class LevelScriptProcessor(BaseProcessor):
         ctx.script_cmd_history.append([])
 
         from deferred_output import DeferredScriptOutput
+
         prev_deferred = ctx.deferred
         ctx.deferred = DeferredScriptOutput()
         if prev_deferred is not None:

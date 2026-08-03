@@ -549,7 +549,8 @@ def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
     # G_TX_RENDERTILE (0) always takes priority over other tiles.
     # Process tile 0 last so its format always wins.
     sorted_tile_indices = sorted(
-        tile_indices, key=lambda i: (1 if i == G_TX_RENDERTILE else 0, current_texture_info.tiles[i].config_pos)
+        tile_indices,
+        key=lambda i: (1 if i == G_TX_RENDERTILE else 0, current_texture_info.tiles[i].config_pos),
     )
 
     for tile_idx in sorted_tile_indices:

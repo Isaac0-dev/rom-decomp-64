@@ -235,7 +235,9 @@ def load_segment(seg_num: int, rom_start: int, rom_end: int, should_decompress: 
 
     rom_size = len(sRom)
     if rom_start < 0 or rom_start >= rom_size:
-        debug_print(f"Invalid ROM offset for segment 0x{seg_num:X}: 0x{rom_start:X} (ROM size: 0x{rom_size:X})")
+        debug_print(
+            f"Invalid ROM offset for segment 0x{seg_num:X}: 0x{rom_start:X} (ROM size: 0x{rom_size:X})"
+        )
         return
 
     sRom.seek(int(rom_start))

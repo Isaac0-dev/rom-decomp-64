@@ -330,7 +330,12 @@ def get_sequence_volume(data: bytes) -> Optional[int]:
             pos += 1
         elif (b & 0xF0) == 0x90:  # seq_startchannel
             pos += 3
-        elif (b & 0xF0) in (0x00, 0x50, 0x70, 0x80):  # testchdisabled/subvariation/setvariation/getvariation
+        elif (b & 0xF0) in (
+            0x00,
+            0x50,
+            0x70,
+            0x80,
+        ):  # testchdisabled/subvariation/setvariation/getvariation
             pos += 1
         elif b in (0xFC, 0xFB, 0xFA, 0xF9, 0xF5, 0xD2, 0xD1):  # addr commands
             pos += 3
