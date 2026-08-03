@@ -3,7 +3,7 @@ import os
 
 # Check if we are running in a browser environment (Pyodide)
 try:
-    import pyodide
+    import pyodide  # noqa: F401
 
     IS_BROWSER = True
 except ImportError:

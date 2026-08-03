@@ -143,7 +143,6 @@ def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
     last_prim_color = None
     last_fog_color = None
     last_blend_color = None
-    last_render_mode = None
     last_other_mode_l = None
     last_other_mode_h = None
     last_geometry_mode = None
@@ -159,7 +158,7 @@ def eliminate_redundant_rdp_state(commands: List[CommandIR]) -> List[CommandIR]:
         if cmd.opcode in reset_opcodes:
             last_combine_w0 = last_combine_w1 = None
             last_env_color = last_prim_color = last_fog_color = last_blend_color = None
-            last_render_mode = last_other_mode_l = last_other_mode_h = None
+            last_other_mode_l = last_other_mode_h = None
             last_geometry_mode = last_texture_w0 = last_texture_w1 = None
             last_fog_factor = None
             new_cmds.append(cmd)

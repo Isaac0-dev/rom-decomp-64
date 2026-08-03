@@ -10,7 +10,6 @@ from segment import (
     load_segment,
     segmented_to_virtual,
     get_segment,
-    segment_from_addr,
     sSegments,
 )
 from rom_database import CommandIR, Parameter
@@ -697,7 +696,6 @@ def LOAD_MODEL_FROM_GEO(values):
         restore_area_segmented_0e()
 
     comment = ""
-    seg_num = segment_from_addr(geo)
 
     from model_ids import resolve_model_id
 

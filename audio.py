@@ -543,10 +543,11 @@ class AudioProcessor(BaseProcessor):
             with open(out_path, "wb") as f:
                 f.write(seq_rec.data)
 
+            seq_name = seq_rec.name.replace("'", r"\'")
             lua_lines.append(
                 f"smlua_audio_utils_replace_sequence("
                 f"0x{seq_rec.seq_id:02X}, 0x{seq_rec.bank_id:02X}, "
-                f"{seq_rec.volume}, '{seq_rec.name.replace("'", "\\'")}')\n"
+                f"{seq_rec.volume}, '{seq_name}')\n"
             )
 
         if self.txt:

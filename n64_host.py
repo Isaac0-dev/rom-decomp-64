@@ -10,7 +10,7 @@ IS_BROWSER = sys.platform == "emscripten"
 if IS_BROWSER:
     try:
         import js
-        import pyodide
+        import pyodide  # noqa: F401
     except ImportError:
         pass
 
