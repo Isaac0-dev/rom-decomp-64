@@ -820,7 +820,7 @@ class BehaviorProcessor(BaseProcessor):
         anon_hash = structural_hash_behavior_anonymous(commands_data, script_start=segmented_addr)
 
         # Placeholder name for initial discovery.
-        # Final identification happens in a refinement pass (py/db_passes.py).
+        # Final identification happens in a refinement pass (db_passes.py).
         name = f"bhv_unknown_{segmented_addr:08X}"
 
         phys_addr = seg_start + offset_from_segment_addr(segmented_addr)
@@ -865,7 +865,7 @@ class BehaviorProcessor(BaseProcessor):
             output += f"{indent_str}{name}({params_str}),\n"
             if name in self.BLOCK_STARTS:
                 indent += 1
-        output += "};\n"
+        output += "};"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "behavior", record.beh_name, output)
         return output

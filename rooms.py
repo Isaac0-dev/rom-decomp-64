@@ -59,7 +59,7 @@ class RoomsProcessor(BaseProcessor):
             chunk = record.values[i : i + 8]
             vals = ", ".join(f"{v:2d}" for v in chunk)
             output_str += f"    {vals}, // {i}-{i + len(chunk) - 1}\n"
-        output_str += "};\n"
+        output_str += "};"
         self.ctx.txt.write(self.ctx, "room", record.name, output_str)
         return output_str
 

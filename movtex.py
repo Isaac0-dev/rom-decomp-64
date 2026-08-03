@@ -610,7 +610,7 @@ class MovtexExtractor:
         for idx, entry in enumerate(coll.entries):
             arr_name = f"{base_name}_quad_{idx}"
             values = self.values_to_struct(entry.values)
-            parts.append(f"static Movtex {arr_name}[] = {{\n{values}}};\n")
+            parts.append(f"static Movtex {arr_name}[] = {{\n{values}}};")
 
         coll_name = f"{base_name}_collection"
         parts.append(f"const struct MovtexQuadCollection {coll_name}[] = {{")

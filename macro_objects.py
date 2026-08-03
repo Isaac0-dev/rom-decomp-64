@@ -45,7 +45,7 @@ def _generate_macro_c_code(
         output += f"// {context_prefix}\n"
         output += f"const MacroObject {macro_list_name}[] = {{\n"
         output += "    MACRO_OBJECT_END(),\n"
-        output += "};\n"
+        output += "};"
         return output
 
     output += f"// {context_prefix}\n"
@@ -59,7 +59,7 @@ def _generate_macro_c_code(
             output += f"    MACRO_OBJECT_WITH_BEH_PARAM({preset_name}, {yaw}, {posX}, {posY}, {posZ}, {behParam:#x}),\n"
 
     output += "    MACRO_OBJECT_END(),\n"
-    output += "};\n"
+    output += "};"
 
     return output
 

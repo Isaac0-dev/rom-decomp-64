@@ -416,7 +416,7 @@ class GeoProcessor(BaseProcessor):
 
             params_str = ", ".join(map(str, ir.params))
             output += f"{prefix}{ir.name}({params_str}),\n"
-        output += "};\n"
+        output += "};"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "geo", record.name, output)
         return output

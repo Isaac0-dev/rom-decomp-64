@@ -514,7 +514,7 @@ class CollisionProcessor(BaseProcessor):
         for ir in record.commands:
             params_str = ", ".join(map(str, ir.params))
             output += f"    {ir.name}({params_str}),\n"
-        output += "};\n"
+        output += "};"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "collision", record.name, output)
         return output

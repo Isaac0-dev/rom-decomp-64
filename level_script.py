@@ -169,7 +169,7 @@ class LevelScriptProcessor(BaseProcessor):
 
             params_str = ", ".join(_param_to_str(p) for p in ir.params)
             output += f"{prefix}{comment}{ir.name}({params_str}),\n"
-        output += "};\n"
+        output += "};"
         if self.ctx.txt:
             self.ctx.txt.write(self.ctx, "script", record.name, output)
         return output
