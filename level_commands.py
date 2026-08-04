@@ -736,7 +736,7 @@ def OBJECT_WITH_ACTS(values):
     bhv_rec = get_behavior_processor().parse(
         beh, txt=ctx.txt, context_prefix=ctx.current_context_prefix
     )
-    beh_name = str(bhv_rec)
+    beh_name = str(bhv_rec) if bhv_rec is not None else "NULL"
     beh_name_hash = getattr(bhv_rec, "hash", "") if not isinstance(bhv_rec, str) else ""
 
     from model_ids import resolve_model_id

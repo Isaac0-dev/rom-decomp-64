@@ -49,8 +49,6 @@ class LevelScriptProcessor(BaseProcessor):
             )
             return None
 
-        # 1. Load data
-        segment_num = segment_from_addr(segmented_addr)
         data = get_segment(segment_num)
         if data is None:
             debug_fail(f"end of the road: failed to load 0x{segmented_addr:08x}")

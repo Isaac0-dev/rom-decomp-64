@@ -251,7 +251,11 @@ class ObjectCorrelationPass(DatabaseAnalysisPass):
                     continue
 
                 beh_rec = cmd.params[8]
-                if beh_rec and beh_rec.beh_name.startswith("bhv_unknown"):
+                if (
+                    beh_rec
+                    and hasattr(beh_rec, "beh_name")
+                    and beh_rec.beh_name.startswith("bhv_unknown")
+                ):
                     cmd.comment = "// "
 
         debug_print("[ObjectCorrelationPass] Done.")
