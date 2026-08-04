@@ -1,5 +1,12 @@
 from .gbi1 import GBI1
-from gbi_defines import G_DL_PUSH, G_GEOMETRYMODE_FLAGS_GBI2, get_named_flags
+from typing import Dict, cast
+from gbi_defines import (
+    G_DL_PUSH,
+    G_GEOMETRYMODE_FLAGS_GBI2,
+    G_SETOTHERMODE_H_SHIFTS,
+    G_SETOTHERMODE_L_SHIFTS,
+    get_named_flags,
+)
 import vertices
 import lights
 from texture import set_tile_size
@@ -20,7 +27,7 @@ class GBI2(GBI1):
                 0x04: self.execute_branch_z,
                 0x05: self.execute_tri1,
                 0x06: self.execute_tri2,
-                0x07: self.execute_quad,
+                0x07: self.execute_tri2,
                 0x08: self.execute_line_3d,
                 0x09: self.execute_bg_rect_1cyc,
                 0x0A: self.execute_bg_rect_copy,
@@ -102,9 +109,10 @@ class GBI2(GBI1):
             )
 
     def execute_tri1(self, cmd0, cmd1, dis):
-        v0 = self._SHIFTR(cmd0, 1, 7)
+        v0 = self._SHIFTR(cmd0, 17, 7)
         v1 = self._SHIFTR(cmd0, 9, 7)
-        v2 = self._SHIFTR(cmd0, 17, 7)
+        v2 = self._SHIFTR(cmd0, 1, 7)
+        flag = self._SHIFTR(cmd1, 24, 8)
 
         if dis:
             from texture import commit_textures
@@ -113,36 +121,7 @@ class GBI2(GBI1):
             dis.side_effects.append(
                 {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
             )
-            dis.set_cmd("gsSP1Triangle", {"v0": v0, "v1": v1, "v2": v2, "flag": 0})
-
-    def execute_tri2(self, cmd0, cmd1, dis):
-        v00 = self._SHIFTR(cmd1, 1, 7)
-        v01 = self._SHIFTR(cmd1, 9, 7)
-        v02 = self._SHIFTR(cmd1, 17, 7)
-        v10 = self._SHIFTR(cmd0, 1, 7)
-        v11 = self._SHIFTR(cmd0, 9, 7)
-        v12 = self._SHIFTR(cmd0, 17, 7)
-
-        if dis:
-            from texture import commit_textures
-
-            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
-            dis.side_effects.append(
-                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
-            )
-            dis.set_cmd(
-                "gsSP2Triangles",
-                {
-                    "v00": v00,
-                    "v01": v01,
-                    "v02": v02,
-                    "flag0": 0,
-                    "v10": v10,
-                    "v11": v11,
-                    "v12": v12,
-                    "flag1": 0,
-                },
-            )
+            dis.set_cmd("gsSP1Triangle", {"v0": v0, "v1": v1, "v2": v2, "flag": flag})
 
     def execute_matrix(self, cmd0, cmd1, dis):
         if dis:
@@ -175,6 +154,40 @@ class GBI2(GBI1):
             dis.set_cmd("gsSPEndDisplayList", {"end": True})
             dis.end_dl = True
 
+    def execute_set_other_mode_l(self, cmd0, cmd1, dis):
+        length = self._SHIFTR(cmd0, 0, 8) + 1
+        shift = max(0, 32 - self._SHIFTR(cmd0, 8, 8) - length)
+        data = cmd1
+
+        if dis:
+            cmd_info = G_SETOTHERMODE_L_SHIFTS.get(shift)
+            if cmd_info:
+                cmd_name = cmd_info["cmd"]
+                const_val = cast(Dict[int, str], cmd_info["consts"]).get(data, f"0x{data:X}")
+                dis.set_cmd(cmd_name, {"value": const_val})
+            else:
+                dis.set_cmd(
+                    "gsSPSetOtherMode",
+                    {"cmd": "G_SETOTHERMODE_L", "shift": shift, "len": length, "val": data},
+                )
+
+    def execute_set_other_mode_h(self, cmd0, cmd1, dis):
+        length = self._SHIFTR(cmd0, 0, 8) + 1
+        shift = max(0, 32 - self._SHIFTR(cmd0, 8, 8) - length)
+        data = cmd1
+
+        if dis:
+            cmd_info = G_SETOTHERMODE_H_SHIFTS.get(shift)
+            if cmd_info:
+                cmd_name = cmd_info["cmd"]
+                const_val = cast(Dict[int, str], cmd_info["consts"]).get(data, f"0x{data:X}")
+                dis.set_cmd(cmd_name, {"value": const_val})
+            else:
+                dis.set_cmd(
+                    "gsSPSetOtherMode",
+                    {"cmd": "G_SETOTHERMODE_H", "shift": shift, "len": length, "val": data},
+                )
+
     def execute_move_mem(self, cmd0, cmd1, dis):
         type_val = cmd0 & 0xFE
         offset = self._SHIFTR(cmd0, 8, 8) << 3
@@ -192,7 +205,7 @@ class GBI2(GBI1):
                 # dis.set_cmd("gsSPViewport", {"viewport": vp_name})
             if type_val == 10:  # Light
                 length = self._SHIFTR(cmd0, 16, 8) << 1
-                light_idx = (offset - 48) // 24
+                light_idx = (offset // 24) - 1
                 if length == 40:
                     l1_record = lights.parse_light(cmd1, 24, dis.sTxt, dis.context_prefix)
                     l2_record = lights.parse_light(cmd1 + 24, 16, dis.sTxt, dis.context_prefix)
@@ -205,8 +218,8 @@ class GBI2(GBI1):
             dis.set_cmd("gsSPMoveMem", {}, commented_out=True)
 
     def execute_move_word(self, cmd0, cmd1, dis):
-        type_val = cmd0 & 0xFF
-        offset = self._SHIFTR(cmd0, 8, 16)
+        type_val = self._SHIFTR(cmd0, 16, 8)
+        offset = cmd0 & 0xFFFF
         data = cmd1
         if dis:
             if type_val == 0x02:  # G_MW_NUMLIGHT
@@ -258,27 +271,9 @@ class GBI2(GBI1):
         if dis:
             dis.set_cmd("gsSPBranchLessZ", {"vtx": vtx, "zval": zval}, commented_out=True)
 
-    def execute_quad(self, cmd0, cmd1, dis):
-        v00 = self._SHIFTR(cmd1, 1, 7)
-        v01 = self._SHIFTR(cmd1, 9, 7)
-        v02 = self._SHIFTR(cmd1, 17, 7)
-        v12 = self._SHIFTR(cmd0, 17, 7)
-
-        if dis:
-            from texture import commit_textures
-
-            commit_textures(dis.sTxt, dis.current_pos, [0, 1])
-            dis.side_effects.append(
-                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
-            )
-            dis.set_cmd(
-                "gsSP1Quadrangle",
-                {"v0": v00, "v1": v01, "v2": v02, "v3": v12, "flag": 0},
-            )
-
     def execute_line_3d(self, cmd0, cmd1, dis):
-        v0 = self._SHIFTR(cmd1, 1, 7)
-        v1 = self._SHIFTR(cmd1, 9, 7)
+        v0 = self._SHIFTR(cmd0, 17, 7)
+        v1 = self._SHIFTR(cmd0, 9, 7)
         if dis:
             from texture import commit_textures
 
