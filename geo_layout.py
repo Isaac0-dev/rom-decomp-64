@@ -495,7 +495,7 @@ def G_FRUST(ls, i, s, c):
     fov = to_signed16(ls[0] & 0xFFFF)
     near, far = CMD_HH_unpack_s(ls[1])
     if len(ls) > 2:
-        func = resolve_geo_asm(ls[2], geo_camera_frustum_callbacks) or "NULL"
+        func = resolve_geo_asm(ls[2], geo_camera_frustum_callbacks) or "geo_camera_fov"
         return (
             CommandIR(0x0A, [fov, near, far, func], name="GEO_CAMERA_FRUSTUM_WITH_FUNC"),
             False,
@@ -602,7 +602,7 @@ def G_TRANS_NODE(ls, i, s, c):
 
 
 def G_ROT_NODE(ls, i, s, c):
-    param = (ls[0] >> 8) & 0xFF
+    param = (ls[0] >> 16) & 0xFF
     layer = param & 0xF
     layer_name = LAYER_NAMES.get(layer, layer)
     x = to_signed16(ls[0] & 0xFFFF)
