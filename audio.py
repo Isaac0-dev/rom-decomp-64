@@ -206,44 +206,65 @@ def find_gAlBankSets(rom_bytes: bytes, seq_count: int, header_offset: int) -> Op
 
 def get_bank_id(rom_bytes: bytes, source: Tuple[Optional[str], int], seq_id: int) -> int:
     strategy, base = source
+    max_bank_id = 0x40
 
-    try:
-        if strategy == "7f0000":
-            offset_addr = base + seq_id * 2
-            if offset_addr + 2 > len(rom_bytes):
-                return 0
+    def read_bank_from_strategy(
+        current_strategy: Optional[str], current_base: int
+    ) -> Optional[int]:
+        if not current_strategy or current_base is None:
+            return None
 
-            offset = struct.unpack_from(">H", rom_bytes, offset_addr)[0]
-            if offset == 0xFFFF:
-                return 0
+        try:
+            if current_strategy == "7f0000":
+                offset_addr = current_base + seq_id * 2
+                if offset_addr + 2 > len(rom_bytes):
+                    return None
 
-            bank_addr = base + offset + 1
-            if bank_addr >= len(rom_bytes):
-                return 0
+                offset = struct.unpack_from(">H", rom_bytes, offset_addr)[0]
+                if offset == 0xFFFF:
+                    return None
 
-            return rom_bytes[bank_addr]
+                bank_addr = current_base + offset + 1
+                if bank_addr >= len(rom_bytes):
+                    return None
 
-        elif strategy == "scan":
-            offset_addr = base + seq_id * 2
-            offset = struct.unpack_from(">H", rom_bytes, offset_addr)[0]
-            if offset == 0xFFFF:
-                return 0
+                return rom_bytes[bank_addr]
 
-            entry_addr = base + offset
-            if entry_addr >= len(rom_bytes):
-                return 0
+            if current_strategy == "scan":
+                offset_addr = current_base + seq_id * 2
+                offset = struct.unpack_from(">H", rom_bytes, offset_addr)[0]
+                if offset == 0xFFFF:
+                    return None
 
-            num_banks = rom_bytes[entry_addr]
-            if num_banks == 0:
-                return 0
+                entry_addr = current_base + offset
+                if entry_addr >= len(rom_bytes):
+                    return None
 
-            return rom_bytes[entry_addr + num_banks]
+                num_banks = rom_bytes[entry_addr]
+                if num_banks == 0:
+                    return None
 
-    except Exception as e:
-        debug_print(f"Error getting bank for seq {seq_id}: {e}")
-        return 0
+                return rom_bytes[entry_addr + num_banks]
 
-    return 0
+        except Exception as e:
+            debug_print(f"Error getting bank for seq {seq_id} via {current_strategy}: {e}")
+            return None
+
+        return None
+
+    for current_strategy in [strategy, "scan" if strategy != "scan" else "7f0000"]:
+        bank_id = read_bank_from_strategy(current_strategy, base)
+        if bank_id is None:
+            continue
+        if 0 <= bank_id <= max_bank_id:
+            return bank_id
+
+        debug_print(
+            f"Bank {bank_id} for seq {seq_id} from {current_strategy} is out of range; trying fallback"
+        )
+
+    debug_print(f"Falling back to default bank 0x2A for seq {seq_id}")
+    return 0x2A
 
 
 def detect_bank_source(
