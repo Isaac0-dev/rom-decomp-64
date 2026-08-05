@@ -361,9 +361,5 @@ def write_tweaks():
     tweaks += ctx.level_values.get_tweaks_lua()
     tweaks += ctx.behavior_values.get_tweaks_lua()
 
-    from paintings import get_painting_string
-
-    tweaks += get_painting_string()
-
     if tweaks:
         ctx.txt.write_lua(tweaks, "tweaks.lua")
