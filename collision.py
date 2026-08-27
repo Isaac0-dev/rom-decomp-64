@@ -20,23 +20,6 @@ TERRAIN_LOAD_END = 0x42
 TERRAIN_LOAD_OBJECTS = 0x43
 TERRAIN_LOAD_ENVIRONMENT = 0x44
 
-SPECIAL_SURFACES = {
-    0x0004: "SURFACE_0004",
-    0x000E: "SURFACE_FLOWING_WATER",
-    0x0024: "SURFACE_DEEP_MOVING_QUICKSAND",
-    0x0025: "SURFACE_SHALLOW_MOVING_QUICKSAND",
-    0x0027: "SURFACE_MOVING_QUICKSAND",
-    0x002C: "SURFACE_HORIZONTAL_WIND",
-    0x002D: "SURFACE_INSTANT_MOVING_QUICKSAND",
-}
-
-COLLISION_COMMANDS = {
-    TERRAIN_LOAD_CONTINUE,
-    TERRAIN_LOAD_OBJECTS,
-    TERRAIN_LOAD_ENVIRONMENT,
-    TERRAIN_LOAD_END,
-}
-
 # --- Special Presets ---
 preset_id_map: Dict[str, int] = {
     "special_null_start": 0,
@@ -212,17 +195,35 @@ SPECIAL_PRESET_TYPES: Dict[int, int] = {
     141: SPTYPE_DEF_PARAM_AND_YROT,
 }
 
+is_rom_using_8byte_collision = False
+
 
 # --- Parsing Helpers ---
+
+
+def surface_has_force(surfaceType: int) -> bool:
+    return (
+        surfaceType == 0x0004  # SURFACE_0004
+        or surfaceType == 0x000E  # SURFACE_FLOWING_WATER
+        or surfaceType == 0x002C  # SURFACE_HORIZONTAL_WIND
+        or surfaceType == 0x0027  # SURFACE_MOVING_QUICKSAND
+        or surfaceType == 0x0024  # SURFACE_DEEP_MOVING_QUICKSAND
+        or surfaceType == 0x0025  # SURFACE_SHALLOW_MOVING_QUICKSAND
+        or surfaceType == 0x002D  # SURFACE_INSTANT_MOVING_QUICKSAND
+    )
 
 
 def _parse_vertices(
     rom: CustomBytesIO, x_coords: List[int], z_coords: List[int]
 ) -> Tuple[List[CommandIR], List[Tuple[int, int, int]]]:
+    if rom.tell() + 2 > len(rom):
+        return [], []
     vcount = rom.read_u16()
     ir_list = [CommandIR(TERRAIN_LOAD_VERTICES, [vcount], name="COL_VERTEX_INIT")]
     verts = []
     for _ in range(vcount):
+        if rom.tell() + 6 > len(rom):
+            break
         x, y, z = struct.unpack(">3h", rom.read(6))
         verts.append((x, y, z))
         ctx.level_values.lowest_vtx_height = min(ctx.level_values.lowest_vtx_height, y)
@@ -236,53 +237,41 @@ def _parse_vertices(
     return ir_list, verts
 
 
-def looks_like_next_cmd(val: int) -> bool:
-    is_cmd = val in COLLISION_COMMANDS or val < 0x40 or val >= 0x65
-    if not is_cmd:
-        debug_print(f"DEBUG: looks_like_next_cmd rejected 0x{val:02X}")
-    return is_cmd
+def _parse_triangle_block(rom: CustomBytesIO) -> Tuple[List[CommandIR], int]:
+    global is_rom_using_8byte_collision
 
-
-def _parse_triangles(rom: CustomBytesIO) -> Tuple[List[CommandIR], int]:
-    ir_list = []
+    if rom.tell() + 4 > len(rom):
+        return [], 0
+    stype = rom.read_u16()
+    tcount = rom.read_u16()
+    ir_list = [CommandIR(TERRAIN_LOAD_CONTINUE, [SURFACES(stype), tcount], name="COL_TRI_INIT")]
+    has_param = surface_has_force(stype)
+    tri_size = 8 if (is_rom_using_8byte_collision or has_param) else 6
     total = 0
-    while True:
-        try:
-            if rom.peek_u16() == TERRAIN_LOAD_CONTINUE:
-                break
-            stype = rom.read_u16()
-            tcount = rom.read_u16()
-        except EOFError:
+    for _ in range(tcount):
+        if rom.tell() + tri_size > len(rom):
             break
-
-        ir_list.append(
-            CommandIR(TERRAIN_LOAD_CONTINUE, [SURFACES(stype), tcount], name="COL_TRI_INIT")
-        )
-        total += tcount
-        is_spec = stype in SPECIAL_SURFACES
-        for _ in range(tcount):
-            v1, v2, v3 = struct.unpack(">3h", rom.read(6))
-            if is_spec:
-                param = struct.unpack(">H", rom.read(2))[0]
-                ir_list.append(
-                    CommandIR(
-                        TERRAIN_LOAD_CONTINUE,
-                        [v1, v2, v3, f"0x{param:04X}"],
-                        name="COL_TRI_SPECIAL",
-                    )
+        v1, v2, v3 = struct.unpack(">3h", rom.read(6))
+        if has_param:
+            param = struct.unpack(">H", rom.read(2))[0]
+            ir_list.append(
+                CommandIR(
+                    TERRAIN_LOAD_CONTINUE,
+                    [v1, v2, v3, f"0x{param:04X}"],
+                    name="COL_TRI_SPECIAL",
                 )
-            else:
-                ir_list.append(CommandIR(TERRAIN_LOAD_CONTINUE, [v1, v2, v3], name="COL_TRI"))
-
-    try:
-        rom.read_u16()  # 0x41
-    except EOFError:
-        pass
-    ir_list.append(CommandIR(TERRAIN_LOAD_CONTINUE, [], name="COL_TRI_STOP"))
+            )
+        else:
+            if is_rom_using_8byte_collision:
+                rom.read(2)  # discard the 4th empty parameter (sometimes on decomp hacks)
+            ir_list.append(CommandIR(TERRAIN_LOAD_CONTINUE, [v1, v2, v3], name="COL_TRI"))
+        total += 1
     return ir_list, total
 
 
 def _parse_special_objects(rom: CustomBytesIO) -> List[CommandIR]:
+    if rom.tell() + 4 > len(rom):
+        return []
     cmd = rom.read_u16()
     if cmd != TERRAIN_LOAD_OBJECTS:
         raise ValueError("Not a special object block")
@@ -335,6 +324,8 @@ def _parse_special_objects(rom: CustomBytesIO) -> List[CommandIR]:
 
 
 def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
+    if rom.tell() + 4 > len(rom):
+        return []
     cmd = rom.read_u16()
     if cmd != TERRAIN_LOAD_ENVIRONMENT:
         raise ValueError("Not a water box block")
@@ -342,6 +333,7 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
     ir_list = [CommandIR(TERRAIN_LOAD_ENVIRONMENT, [count], name="COL_WATER_BOX_INIT")]
     for _ in range(count):
         id_val, x1, z1, x2, z2, y = struct.unpack(">6h", rom.read(12))
+        # if id_val is >=50, its a gas box
         ir_list.append(
             CommandIR(TERRAIN_LOAD_ENVIRONMENT, [id_val, x1, z1, x2, z2, y], name="COL_WATER_BOX")
         )
@@ -357,8 +349,14 @@ def _parse_water_boxes(rom: CustomBytesIO) -> List[CommandIR]:
 
 
 def parse_collision_data_to_ir(
-    rom: CustomBytesIO, is_behavior: bool
+    rom: CustomBytesIO, is_behavior: bool, retried: bool = False
 ) -> Tuple[List[CommandIR], int]:
+    global is_rom_using_8byte_collision
+
+    start = rom.tell()
+    entry_low = ctx.level_values.lowest_vtx_height
+    entry_high = ctx.level_values.highest_vtx_height
+
     ir_list = []
     total_surfaces = 0
     x_coords = []
@@ -373,38 +371,52 @@ def parse_collision_data_to_ir(
 
     ir_list.append(CommandIR(0, [], name="COL_INIT"))
 
-    # Pass 1: Vertices
+    # Vertices
     v_ir, _ = _parse_vertices(rom, x_coords, z_coords)
     ir_list.extend(v_ir)
 
-    # Pass 2: Triangles
-    t_ir, total_surfaces = _parse_triangles(rom)
-    ir_list.extend(t_ir)
-
-    # Pass 3: Special Objects
-    if rom.tell() + 2 <= len(rom.getvalue()):
-        if rom.peek_u16() == TERRAIN_LOAD_OBJECTS:
-            ir_list.extend(_parse_special_objects(rom))
-
-    # Pass 4: Water Boxes
-    if rom.tell() + 2 <= len(rom.getvalue()):
-        if rom.peek_u16() == TERRAIN_LOAD_ENVIRONMENT:
-            ir_list.extend(_parse_water_boxes(rom))
-
-    # End
-    while rom.tell() + 2 <= len(rom.getvalue()):
+    # Triangles, special objects, water boxes
+    hit_col_end = False
+    while rom.tell() + 2 <= len(rom):
+        before = rom.tell()
         c = rom.peek_u16()
-        if c == TERRAIN_LOAD_END:
+        if c == TERRAIN_LOAD_VERTICES:  # another vertex section
+            rom.read_u16()
+            v_ir, _ = _parse_vertices(rom, x_coords, z_coords)
+            ir_list.extend(v_ir)
+        elif c == TERRAIN_LOAD_CONTINUE:  # end of triangle section
+            rom.read_u16()
+            ir_list.append(CommandIR(TERRAIN_LOAD_CONTINUE, [], name="COL_TRI_STOP"))
+        elif c == TERRAIN_LOAD_END:  # end of collision data
             rom.read_u16()
             ir_list.append(CommandIR(TERRAIN_LOAD_END, [], name="COL_END"))
+            hit_col_end = True
             break
-        if looks_like_next_cmd(c):
-            # Sometimes there are multiple triangle blocks
-            t_ir, extra = _parse_triangles(rom)
+        elif c == TERRAIN_LOAD_OBJECTS:  # special objects
+            ir_list.extend(_parse_special_objects(rom))
+        elif c == TERRAIN_LOAD_ENVIRONMENT:  # water boxes < 50, gas boxes >= 50
+            ir_list.extend(_parse_water_boxes(rom))
+        else:  # triangle block header
+            t_ir, extra = _parse_triangle_block(rom)
             ir_list.extend(t_ir)
             total_surfaces += extra
-            continue
-        break
+        if rom.tell() == before:
+            break  # no progress (ran off the end of the segment) stop spinning
+
+    # If we didn't find COL_END, try again with the 8 byte mode (if we haven't already)
+    # This is for some decomp romhacks (HackerSM64 based) where all surfaces have force
+    if not hit_col_end:
+        is_rom_using_8byte_collision = not is_rom_using_8byte_collision
+        if retried:
+            debug_print(
+                "Collision data never reached TERRAIN_LOAD_END (even after retrying with "
+                "the other triangle record size). Returning garbage data!!"
+            )
+            return ir_list, total_surfaces
+        ctx.level_values.lowest_vtx_height = entry_low
+        ctx.level_values.highest_vtx_height = entry_high
+        rom.seek(start)
+        return parse_collision_data_to_ir(rom, is_behavior, retried=True)
 
     # Check if the level is 2D by checking occupied chunks
     # This strategy works around the problem of having large death planes
