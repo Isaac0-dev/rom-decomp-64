@@ -591,15 +591,6 @@ def get_rom() -> Optional[Any]:
     return rom
 
 
-def get_cur_level() -> Optional[str]:
-    for i in reversed(range(len(gLevelScriptTracker))):
-        name = gLevelScriptTracker[i]
-        for level in level_name_to_int_lookup:
-            if level in name:
-                return level
-    return None
-
-
 if IS_BROWSER:
     import js
 
