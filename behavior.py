@@ -798,6 +798,10 @@ class BehaviorProcessor(BaseProcessor):
             offset = offset_from_segment_addr(segmented_addr)
         rom.seek(offset)
 
+        if rom.tell() + 4 > len(rom):
+            debug_fail(f"Behavior pointer 0x{segmented_addr:08x} is beyond rom size")
+            return None
+
         commands_ir = []
         commands_data = []
         found_end = False
