@@ -912,7 +912,6 @@ class MovtexExtractor:
                 f"movtexqc_register('{coll_name}', {level_name_const}, {area}, {coll_type})\n",
                 "main.lua",
             )
-            print(f"SUCCESS: Extracted collection {coll_name} for {context_prefix}")
 
 
 movtex_extractor: MovtexExtractor = MovtexExtractor()
