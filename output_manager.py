@@ -26,7 +26,7 @@ class OutputManager:
     def __init__(self, base_path, internal_name):
         self.base_path = base_path
 
-        self.lua_file = open(os.path.join(base_path, "main.lua"), "w")
+        self.lua_file = open(os.path.join(base_path, "main.lua"), "w", encoding="utf-8")
         self.lua_file.write(
             f"-- name: {internal_name}\n-- description: Extracted with rom-decomp-64.\n-- incompatible: romhack\n"
         )
@@ -201,7 +201,7 @@ class OutputManager:
             # Lua files are usually written once or appended rarely.
             # For simplicity, we can still use the cache but let's just write directly
             # to avoid mixing logic if they are intended to be completely overwritten.
-            with open(filepath, "w") as lua_file:
+            with open(filepath, "w", encoding="utf-8") as lua_file:
                 lua_file.writelines(content)
 
     def write_lua_append(self, content: list[str], file: str):
