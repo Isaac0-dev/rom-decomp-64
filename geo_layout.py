@@ -80,6 +80,10 @@ def resolve_geo_asm(vram_addr: int, context: Optional[List[str]] = None) -> Opti
             context=context or "Global",
         )
         if result is not None and result.confidence >= 0.90:
+            if result.best_match == "geo_painting_draw":
+                from paintings import notify_painting_draw_discovered
+
+                notify_painting_draw_discovered(rom_offset)
             _geo_asm_cache[vram_addr] = result.best_match
             return result.best_match
     except Exception:

@@ -135,6 +135,8 @@ class OutputManager:
             ]
         ):
             target_dir = os.path.join("textures", "segment2")
+        elif "texture_painting" in context:
+            target_dir = "textures"
         else:
             # 2. Level-based routing
             target_dir = "misc"

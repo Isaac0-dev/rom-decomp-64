@@ -70,8 +70,8 @@ class TextureInfo:
     width: int = 0
     height: int = 0
     context_prefix: Optional[str] = None
-    tiles: List[TileInfo] = None
-    tmem_map: Dict[int, TextureSource] = None
+    tiles: Optional[List[TileInfo]] = None
+    tmem_map: Optional[Dict[int, TextureSource]] = None
 
     def __post_init__(self):
         if self.tiles is None:
@@ -939,6 +939,9 @@ class TextureProcessor(BaseProcessor):
             self.skipped_count += 1
             if not record.is_palette:
                 debug_print(f"Texture {name} has no segment_data, skipping PNG write.")
+
+        if record.skip_definition_write:
+            return ""
 
         u8_buffer = f'ALIGNED8 Texture {name} = {{\n#include "{path}{name}.inc.c"\n}};'
 

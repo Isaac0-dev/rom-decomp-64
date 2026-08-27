@@ -347,6 +347,9 @@ def init_level_script_parsing(rom, txt):
     ctx.txt = txt
     set_rom(rom)
     from segment import load_segment
+    from paintings import register_painting_extraction
+
+    register_painting_extraction()
 
     # Load segment 0 so that physical addresses can be followed;
     # loading it here prevents it from being popped later.

@@ -203,6 +203,7 @@ class TextureRecord:
     segment_data: bytes = b""
     # Raw palette bytes (CI textures only)
     palette_data: Optional[bytes] = None
+    skip_definition_write: bool = False
 
     location: LevelAreaContext = field(default_factory=LevelAreaContext)
 
