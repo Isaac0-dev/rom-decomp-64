@@ -455,6 +455,15 @@ class ExtractionPipeline:
             # Early exit for browser
             return
 
+        # Verify n64js submodule is present
+        n64js_dir = os.path.join(current_dir, "n64js")
+        if not os.path.isdir(n64js_dir) or not os.path.isfile(os.path.join(n64js_dir, "package.json")):
+            print(
+                "ERROR: n64js submodule not found. Please run:\n"
+                "  git submodule update --init"
+            )
+            sys.exit(1)
+
         # Build emulator command
         host = self.host
         if host == "auto":
