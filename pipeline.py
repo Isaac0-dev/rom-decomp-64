@@ -78,7 +78,7 @@ class ExtractionPipeline:
         self.pass_audio()  # extract ALSeqFile data
         self.pass_text()  # text/dialog export (async-capable)
         self.pass_level_scripts()  # parse entry scripts
-        # self.pass_trajectory_scan()  # Disabled for debug purposes
+        self.pass_trajectory_scan()  # scan for trajectories
 
         # Using water boxes found in collision data, find movtex data
         from movtex import movtex_extractor
@@ -813,23 +813,20 @@ class ExtractionPipeline:
 
     def pass_trajectory_scan(self) -> None:
         """
-        Scan for trajectories in specific segments.
-        This is slow and typically only used during deep research.
+        Scan for trajectories
         """
-        from trajectory import scan_for_trajectories
+        from trajectory import scan_for_trajectories, scan_sm64_editor_trajectories
         from utils import debug_print
-        from segment import get_loaded_segment_numbers
 
         assert self.txt is not None
 
         debug_print("Scanning for trajectories...")
-        loaded_segs = get_loaded_segment_numbers()
-        for seg_num in loaded_segs:
-            # Scan all loaded segments EXCEPT Segment 7 (which is level-specific and handled during script parsing)
-            # and excluding Segment 1 (often small/junk in hacks)
-            if seg_num not in (1, 7):
-                debug_print(f"Scanning segment 0x{seg_num:02X} for trajectories...")
-                scan_for_trajectories(seg_num, self.txt)
+        scan_for_trajectories(self.txt)
+        if self.db.meta.hack_type == "SM64 Editor":
+            debug_print("SM64 Editor ROM detected; scanning editor trajectory table...")
+            scan_sm64_editor_trajectories(self.txt)
+        else:
+            debug_print("Non-Editor ROM; skipping editor trajectory scan.")
 
     # ------------------------------------------------------------------
     # Analysis passes (db_passes)
