@@ -16,7 +16,7 @@ from rom_database import (
     GlobalSegRecord,
     RomDatabase,
 )
-from utils import ensure_single_trailing_newline
+from utils import ensure_single_trailing_newline, install_error_hooks
 
 if TYPE_CHECKING:
     from segment import CustomBytesIO
@@ -72,6 +72,7 @@ class ExtractionPipeline:
         Run all passes in order and return an exit code.
         Returns 0 on success, non-zero on error (same as old main()).
         """
+        install_error_hooks()
         self.pass_init()
         self.pass_emulate()  # n64js: detect seg2, microcode, alseq
         self.pass_audio()  # extract ALSeqFile data

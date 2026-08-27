@@ -1,5 +1,5 @@
 from typing import Set, Tuple, Any, Optional
-from context import ctx
+from context import ctx, provenance
 import hashlib
 from segment import (
     segmented_to_virtual,
@@ -31,6 +31,7 @@ _scripts_in_progress: Set[int] = set()  # Guard against re-entrant parse loops
 
 
 class LevelScriptProcessor(BaseProcessor):
+    @provenance("Level Script")
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[LevelRecord]:
         """Refactored version of process_level_script and parse_level_script."""
         label = kwargs.get("label")

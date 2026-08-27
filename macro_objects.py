@@ -2,7 +2,7 @@ import struct
 from typing import Any, List, Optional, Tuple
 
 from base_processor import BaseProcessor
-from context import ctx
+from context import ctx, provenance
 from rom_database import MacroRecord
 from segment import (
     get_segment,
@@ -73,6 +73,7 @@ class MacroObjectProcessor(BaseProcessor):
     serialize() — generates C text from the stored entries, writes via txt.
     """
 
+    @provenance("Macro Objects")
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[MacroRecord]:
         context_prefix: str = kwargs.get("context_prefix") or ""
 

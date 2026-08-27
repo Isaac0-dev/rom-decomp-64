@@ -9,7 +9,7 @@ from segment import (
 from byteio import CustomBytesIO
 from base_processor import BaseProcessor
 from rom_database import CollisionRecord, WaterBoxRecord, CommandIR
-from context import ctx
+from context import ctx, provenance
 from constants import SURFACES
 from utils import debug_fail, debug_print
 
@@ -463,6 +463,7 @@ class CollisionProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
 
+    @provenance("Collision")
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[CollisionRecord]:
         context_prefix = kwargs.get("context_prefix")
         is_behavior = kwargs.get("is_behavior")

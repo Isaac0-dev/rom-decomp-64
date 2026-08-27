@@ -12,7 +12,7 @@ import struct
 from microcode import create_microcode
 from base_processor import BaseProcessor
 from rom_database import DisplayListRecord, CommandIR
-from context import ctx
+from context import ctx, provenance
 
 current_geometry_mode: int = 0x22205
 current_microcode: Any = None
@@ -166,6 +166,7 @@ class DisplayListProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
 
+    @provenance("Display List")
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[DisplayListRecord]:
         sTxt = kwargs.get("txt")
         context_prefix = kwargs.get("context_prefix")

@@ -14,7 +14,7 @@ from byteio import CustomBytesIO
 from segment import get_segment, where_is_segment_loaded, get_loaded_segment_numbers
 from base_processor import BaseProcessor
 from rom_database import BehaviorRecord, CommandIR
-from context import ctx
+from context import ctx, provenance
 from utils import debug_fail
 
 # --- CALL_NATIVE function matching ---
@@ -762,6 +762,7 @@ class BehaviorProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
 
+    @provenance("Behavior Script")
     def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[BehaviorRecord]:
         sTxt = kwargs.get("txt")
         if not segmented_addr:

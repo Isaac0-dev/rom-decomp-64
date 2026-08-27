@@ -611,7 +611,51 @@ else:
         logger.debug(msg)
 
 
+def add_provenance(msg: str) -> str:
+    try:
+        from context import ctx
+
+        chain = ctx.format_parse_chain()
+    except Exception:
+        return msg
+    if chain and chain not in msg:
+        return f"{msg}\n{chain}"
+    return msg
+
+
+# Any uncaught exceptions should be routed through the provenance handler.
+def install_error_hooks() -> None:
+    import traceback
+    import threading
+
+    def _report(exc_type, exc_value, exc_tb) -> None:
+        text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        try:
+            from context import ctx
+
+            suffix = ctx.format_parse_chain() or (ctx.last_failure_chain or "")
+        except Exception:
+            return
+        # Skip if the chain is already in the exception message
+        if not suffix or suffix in text:
+            sys.stderr.write(text)
+            return
+        if not text.endswith("\n"):
+            text += "\n"
+        sys.stderr.write(text + suffix + "\n")
+
+    def _sys_hook(exc_type, exc_value, exc_tb):
+        _report(exc_type, exc_value, exc_tb)
+
+    def _thread_hook(args):
+        _report(args.exc_type, args.exc_value, args.exc_traceback)
+
+    sys.excepthook = _sys_hook
+    threading.excepthook = _thread_hook
+
+
 def exception(msg: str) -> None:
+    msg = add_provenance(msg)
     if is_debugger():
         raise ExtractionError(msg)
 
@@ -630,13 +674,14 @@ def debug_fail(msg: str) -> None:
     if logger.isEnabledFor(logging.DEBUG):
         exception(msg)
     else:
-        logger.warning(msg)
+        logger.warning(add_provenance(msg))
 
 
 def debug_error(msg: str) -> None:
     if logger.isEnabledFor(logging.DEBUG):
         exception(msg)
     else:
+        msg = add_provenance(msg)
         logger.error(msg)
         raise ExtractionError(msg)
 

@@ -8,7 +8,7 @@ from utils import (
     debug_mode_prefix,
 )
 from typing import Any, Dict, List, Optional, Tuple
-from context import ctx
+from context import ctx, provenance
 from segment import (
     segment_from_addr,
     offset_from_segment_addr,
@@ -307,6 +307,7 @@ class GeoProcessor(BaseProcessor):
         super().__init__(context)
         self.parsed_geos: Dict[Tuple[int, int], Any] = {}
 
+    @provenance("Geo Layout")
     def parse(self, segmented_addr: int, **kwargs: Any) -> str:
         sTxt = kwargs.get("txt")
         context_prefix = kwargs.get("context_prefix")
