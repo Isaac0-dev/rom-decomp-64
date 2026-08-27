@@ -101,7 +101,69 @@ class TextureMeta:
 current_texture_info = TextureInfo()
 current_palette: Optional[Union[bytearray, bytes, List[int]]] = None
 
+# Stacks for isolating texture state when parsing fresh DLs
+texture_state_stack: List[tuple] = []
+texture_db_snapshot_stack: List[Dict[str, Any]] = []
+
 texture_table: Dict[str, TextureMeta] = {}
+
+
+def push_texture_state() -> None:
+    import copy
+
+    texture_state_stack.append(
+        (copy.deepcopy(current_texture_info), copy.deepcopy(current_palette))
+    )
+
+
+def pop_texture_state() -> None:
+    global current_palette
+
+    if not texture_state_stack:
+        return
+    saved_info, saved_palette = texture_state_stack.pop()
+    current_texture_info.__dict__.clear()
+    current_texture_info.__dict__.update(saved_info.__dict__)
+    current_palette = saved_palette
+
+
+def reset_texture_state() -> None:
+    global current_palette
+
+    fresh = TextureInfo()
+    current_texture_info.__dict__.clear()
+    current_texture_info.__dict__.update(fresh.__dict__)
+    current_palette = None
+
+
+def push_texture_db_state() -> None:
+    import copy
+
+    snap: Dict[str, Any] = {}
+    if ctx.db is not None and hasattr(ctx.db, "textures"):
+        for k, rec in ctx.db.textures.items():
+            snap[k] = copy.deepcopy(rec)
+    texture_db_snapshot_stack.append(snap)
+
+
+def pop_texture_db_state() -> None:
+    if not texture_db_snapshot_stack:
+        return
+    snap = texture_db_snapshot_stack.pop()
+    if ctx.db is None or not hasattr(ctx.db, "textures"):
+        return
+    for k, old_rec in snap.items():
+        if k in ctx.db.textures:
+            cur = ctx.db.textures[k]
+            if (
+                cur.width != old_rec.width
+                or cur.height != old_rec.height
+                or cur.fmt != old_rec.fmt
+                or cur.siz != old_rec.siz
+                or cur.segment_data != old_rec.segment_data
+                or cur.palette_data != old_rec.palette_data
+            ):
+                ctx.db.textures[k] = old_rec
 
 
 def get_current_skybox() -> Optional[str]:

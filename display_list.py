@@ -17,6 +17,9 @@ from context import ctx, provenance
 current_geometry_mode: int = 0x22205
 current_microcode: Any = None
 
+# Stack for isolating geometry mode when fresh DLs are processed
+geometry_mode_stack: List[int] = []
+
 
 @dataclass
 class GfxCommand:
@@ -74,6 +77,21 @@ def format_params(params: List[Any]) -> str:
 
 def comment_out(text: str) -> str:
     return text if text.lstrip().startswith("//") else f"// {text}"
+
+
+def push_geometry_mode() -> None:
+    geometry_mode_stack.append(current_geometry_mode)
+
+
+def pop_geometry_mode() -> None:
+    global current_geometry_mode
+    if geometry_mode_stack:
+        current_geometry_mode = geometry_mode_stack.pop()
+
+
+def reset_geometry_mode() -> None:
+    global current_geometry_mode
+    current_geometry_mode = 0x22205
 
 
 def set_microcode(name: str) -> None:

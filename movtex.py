@@ -479,13 +479,36 @@ class MovtexExtractor:
         if values is None:
             return None
 
-        # Best-effort: also force parsing the referenced display lists so they get emitted.
+        # Parse the referenced display lists so they get emitted.
+        # Since these are parsed in the middle of a GeoLayout traversal, isolate the RDP state
         try:
-            from display_list import parse_display_list
+            from display_list import (
+                parse_display_list,
+                pop_geometry_mode,
+                push_geometry_mode,
+                reset_geometry_mode,
+            )
+            from texture import (
+                pop_texture_db_state,
+                pop_texture_state,
+                push_texture_db_state,
+                push_texture_state,
+                reset_texture_state,
+            )
 
-            parse_display_list(obj.begin_dl, txt, context_prefix)
-            parse_display_list(obj.end_dl, txt, context_prefix)
-            parse_display_list(obj.tri_dl, txt, context_prefix)
+            push_texture_state()
+            push_texture_db_state()
+            push_geometry_mode()
+            reset_texture_state()
+            reset_geometry_mode()
+            try:
+                parse_display_list(obj.begin_dl, txt, context_prefix)
+                parse_display_list(obj.end_dl, txt, context_prefix)
+                parse_display_list(obj.tri_dl, txt, context_prefix)
+            finally:
+                pop_texture_state()
+                pop_texture_db_state()
+                pop_geometry_mode()
         except Exception:
             pass
 
