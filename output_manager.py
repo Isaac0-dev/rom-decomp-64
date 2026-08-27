@@ -196,6 +196,8 @@ class OutputManager:
                 f.write(content.getbuffer())
             elif isinstance(content, (bytes, bytearray, memoryview)):
                 f.write(content)
+            elif isinstance(content, str):
+                f.write(content.encode("utf-8"))
 
     def write_lua(self, content: list[str], file: str):
         with self.lock:
