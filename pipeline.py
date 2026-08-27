@@ -1069,7 +1069,7 @@ class ExtractionPipeline:
             added = True
             while added:
                 added = False
-                for name in list(included):
+                for name in sorted(included):
                     bhv = MOP_BEHAVIORS.get(name)
                     if not bhv or bhv.dependencies:
                         continue
@@ -1079,7 +1079,7 @@ class ExtractionPipeline:
                         included.add(dep)
                         added = True
 
-            for name in included:
+            for name in sorted(included):
                 mop_data = MOP_BEHAVIORS.get(name)
                 if not mop_data:
                     continue
