@@ -131,11 +131,12 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
 
     if not IS_BROWSER and sys.platform.startswith("linux"):
         executed_dir = os.getcwd()
-        git_tracking_dir = os.path.join(executed_dir, "git_tracking", filename)
+        rom_name = os.path.basename(filename)
+        git_tracking_dir = os.path.join(executed_dir, "git_tracking", rom_name)
         if os.path.exists(git_tracking_dir):
             sync_git_sh = os.path.join(executed_dir, "sync_git.sh")
             if os.path.exists(sync_git_sh):
-                os.system(f"bash {sync_git_sh} {filename}")
+                os.system(f'bash {sync_git_sh} "{rom_name}"')
 
         print("Copying to sm64ex-coop mods folder...")
         import shutil
