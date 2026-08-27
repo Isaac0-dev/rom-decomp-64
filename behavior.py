@@ -11,7 +11,12 @@ from utils import (
     to_signed16,
 )
 from byteio import CustomBytesIO
-from segment import get_segment, where_is_segment_loaded, get_loaded_segment_numbers
+from segment import (
+    get_segment,
+    where_is_segment_loaded,
+    get_loaded_segment_numbers,
+    segmented_to_virtual,
+)
 from base_processor import BaseProcessor
 from rom_database import BehaviorRecord, CommandIR
 from context import ctx, provenance
@@ -787,34 +792,34 @@ class BehaviorProcessor(BaseProcessor):
             return None
 
         rom = CustomBytesIO(data)
-        rom.seek(offset_from_segment_addr(segmented_addr))
+        if seg_num == 0:
+            offset = segmented_to_virtual(segmented_addr)
+        else:
+            offset = offset_from_segment_addr(segmented_addr)
+        rom.seek(offset)
 
         commands_ir = []
         commands_data = []
         found_end = False
         while not found_end:
-            try:
-                pos = rom.tell()
-                w0 = rom.read_u32()
-                opcode = (w0 >> 24) & 0xFF
-                if opcode not in BEHAVIOR_COMMANDS:
-                    break
-
-                info = BEHAVIOR_COMMANDS[opcode]
-                size_words = info["size"]
-                words = [w0]
-                for _ in range(size_words - 1):
-                    words.append(rom.read_u32())
-
-                commands_data.append((opcode, size_words * 4, words))
-                ir, is_end = info["func"](words, sTxt)
-                ir.address = segmented_addr + pos - offset_from_segment_addr(segmented_addr)
-                commands_ir.append(ir)
-                if is_end:
-                    found_end = True
-            except Exception as e:
-                debug_fail(f"Failed to parse behavior at 0x{segmented_addr:08x}: {e}")
+            pos = rom.tell()
+            w0 = rom.read_u32()
+            opcode = (w0 >> 24) & 0xFF
+            if opcode not in BEHAVIOR_COMMANDS:
                 break
+
+            info = BEHAVIOR_COMMANDS[opcode]
+            size_words = info["size"]
+            words = [w0]
+            for _ in range(size_words - 1):
+                words.append(rom.read_u32())
+
+            commands_data.append((opcode, size_words * 4, words))
+            ir, is_end = info["func"](words, sTxt)
+            ir.address = segmented_addr + pos - offset
+            commands_ir.append(ir)
+            if is_end:
+                found_end = True
 
         prec_hash = structural_hash_behavior(commands_data, script_start=segmented_addr)
         fuzzy_hash = structural_hash_behavior_fuzzy(commands_data, script_start=segmented_addr)
@@ -824,7 +829,7 @@ class BehaviorProcessor(BaseProcessor):
         # Final identification happens in a refinement pass (db_passes.py).
         name = f"bhv_unknown_{segmented_addr:08X}"
 
-        phys_addr = seg_start + offset_from_segment_addr(segmented_addr)
+        phys_addr = seg_start + offset
 
         # Map Evidence (Hint Only)
         map_sym = get_physical_symbol(phys_addr, SymbolType.SYMBOL_TYPE_BHV)
