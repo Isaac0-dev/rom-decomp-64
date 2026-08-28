@@ -42,6 +42,10 @@ class LevelScriptProcessor(BaseProcessor):
         if seg_phys_start in self.ctx.db.level_scripts:
             return self.ctx.db.level_scripts[seg_phys_start]
 
+        # Address resolves to ROM header (probably NULL)
+        if seg_phys_start == 0:
+            return None
+
         # Guard: if this exact address is already being parsed higher on the call stack,
         # we have a JUMP that points into itself (circular). Return None instead of looping.
         if seg_phys_start in _scripts_in_progress:
@@ -58,8 +62,10 @@ class LevelScriptProcessor(BaseProcessor):
 
         rom = CustomBytesIO(data)
         seg_offset = offset_from_segment_addr(segmented_addr)
+        if segment_num == 0:
+            seg_offset = seg_phys_start
 
-        # 2. Setup parsing state
+        # Setup parsing state
         prev_indent = ctx.indent
         ctx.indent = 0
         ctx.first_command_in_script = True
