@@ -452,6 +452,13 @@ def get_loaded_segment_numbers() -> List[int]:
 def segmented_to_virtual(segmented_addr: int) -> int:
     seg_num = segment_from_addr(segmented_addr)
     if seg_num == 0:  # address is already physical
+        offset = segmented_addr & 0x00FFFFFF
+        if offset > 0x005F0000 and offset < 0x00620000:
+            return offset + 0x001E0000
+        if offset > 0x00400000 and offset < 0x00420000:
+            return 0x01200000 + (segmented_addr & 0x000FFFFF)
+        if offset < 0x00800000:
+            debug_print(f"Address 0x{segmented_addr:08X} is a ram address, cannot remap to rom.")
         return segmented_addr
 
     location = where_is_segment_loaded(seg_num)

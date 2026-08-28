@@ -26,6 +26,8 @@ from utils import debug_fail
 _func_matcher = None
 _call_native_cache: Dict[int, Optional[str]] = {}
 
+_behaviors_in_progress: set = set()
+
 _CODE_VRAM_START = validator.rom_test(
     0x80246000,
     TEST_REQUIRED,
@@ -786,6 +788,13 @@ class BehaviorProcessor(BaseProcessor):
         if self.ctx.db and db_key in self.ctx.db.behaviors:
             return self.ctx.db.behaviors[db_key]
 
+        # Do not allow infinite recursion due to jumps that point to itself
+        if segmented_addr in _behaviors_in_progress:
+            debug_print(
+                f"WARNING: Circular behavior reference detected at 0x{segmented_addr:08x} – skipping"
+            )
+            return None
+
         data = get_segment(seg_num)
         if data is None:
             debug_fail(f"Failed to load segment {seg_num} for behavior at 0x{segmented_addr:08x}")
@@ -805,25 +814,29 @@ class BehaviorProcessor(BaseProcessor):
         commands_ir = []
         commands_data = []
         found_end = False
-        while not found_end:
-            pos = rom.tell()
-            w0 = rom.read_u32()
-            opcode = (w0 >> 24) & 0xFF
-            if opcode not in BEHAVIOR_COMMANDS:
-                break
+        _behaviors_in_progress.add(segmented_addr)
+        try:
+            while not found_end:
+                pos = rom.tell()
+                w0 = rom.read_u32()
+                opcode = (w0 >> 24) & 0xFF
+                if opcode not in BEHAVIOR_COMMANDS:
+                    break
 
-            info = BEHAVIOR_COMMANDS[opcode]
-            size_words = info["size"]
-            words = [w0]
-            for _ in range(size_words - 1):
-                words.append(rom.read_u32())
+                info = BEHAVIOR_COMMANDS[opcode]
+                size_words = info["size"]
+                words = [w0]
+                for _ in range(size_words - 1):
+                    words.append(rom.read_u32())
 
-            commands_data.append((opcode, size_words * 4, words))
-            ir, is_end = info["func"](words, sTxt)
-            ir.address = segmented_addr + pos - offset
-            commands_ir.append(ir)
-            if is_end:
-                found_end = True
+                commands_data.append((opcode, size_words * 4, words))
+                ir, is_end = info["func"](words, sTxt)
+                ir.address = segmented_addr + pos - offset
+                commands_ir.append(ir)
+                if is_end:
+                    found_end = True
+        finally:
+            _behaviors_in_progress.discard(segmented_addr)
 
         prec_hash = structural_hash_behavior(commands_data, script_start=segmented_addr)
         fuzzy_hash = structural_hash_behavior_fuzzy(commands_data, script_start=segmented_addr)
