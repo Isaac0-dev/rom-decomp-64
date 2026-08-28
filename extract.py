@@ -82,6 +82,12 @@ def parse_args(argv=None):
         default="auto",
         help="Emulation host to use (bun, node, or python).",
     )
+    p.add_argument(
+        "--aiff",
+        dest="aiff_extraction",
+        action="store_true",
+        help="Whether to extract .aiff files of audio from the ROM.",
+    )
     p.add_argument("-v", "--verbose", action="count", default=0, help="Increase output verbosity")
     p.add_argument("filename", nargs="?", default="baserom.us.z64")
     return p.parse_args(argv)
@@ -122,6 +128,7 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
         output_status=_status_enabled,
         called_by_main=called_by_main,
         host=args.host if args else "auto",
+        args=args,
     )
 
     exit_code = pipeline.run()

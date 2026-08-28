@@ -2,6 +2,7 @@ import functools
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Set, Optional, TypeVar
 from tweaks import LevelValues, BehaviorValues
+from argparse import Namespace
 
 
 @dataclass
@@ -75,6 +76,8 @@ class ExtractionContext:
     data: Any = None
     txt: Any = None
     db: Any = None
+
+    args: Optional[Namespace] = None
 
     level_values: LevelValues = field(default_factory=LevelValues)
     behavior_values: BehaviorValues = field(default_factory=BehaviorValues)

@@ -17,6 +17,7 @@ from rom_database import (
     RomDatabase,
 )
 from utils import ensure_single_trailing_newline, install_error_hooks
+from argparse import Namespace
 
 if TYPE_CHECKING:
     from segment import CustomBytesIO
@@ -45,6 +46,7 @@ class ExtractionPipeline:
         output_status: bool = False,
         host: str = "auto",
         called_by_main: bool = False,
+        args: Optional[Namespace] = None,
     ) -> None:
         self.rom_path = rom_path
         self.output_status = output_status
@@ -62,6 +64,8 @@ class ExtractionPipeline:
         self._compression_type: Optional[str] = None
         self._alseq_candidates: List[int] = []
         self._text_future: Optional[Any] = None
+
+        ctx.args = args
 
     # ------------------------------------------------------------------
     # Public entry point

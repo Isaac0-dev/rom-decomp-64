@@ -13,6 +13,7 @@ import re
 import struct
 import sys
 from utils import debug_print
+from context import ctx
 
 TYPE_CTL = 1
 TYPE_TBL = 2
@@ -755,8 +756,11 @@ def main(*Fargs):
                         created_dirs.add(dir)
                     write_aiff(entry, filename)
         return
+
+    assert ctx.args is not None
+
     # Yeppers
-    if not ExtC:
+    if ctx.args.aiff_extraction and not ExtC:
         # Generate aiff files
         for sample_bank in sample_banks:
             dir = os.path.join(samples_out_dir, sample_bank.name)
