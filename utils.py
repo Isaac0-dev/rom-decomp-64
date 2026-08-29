@@ -697,3 +697,6 @@ def offset_from_segment_addr(addr: int) -> int:
             f"(offset from seg addr) Segment and offset have the same value 0x{seg:08X} for address 0x{addr:08X}"
         )
     return offset
+
+def script_str(p):
+    return "NULL" if p is None else str(p)

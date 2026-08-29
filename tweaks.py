@@ -228,8 +228,24 @@ class StarEntry:
             marker = struct.unpack_from(">L", rom_bytes, offset)[0]
             if marker == 0x01010101:
                 return None
+            if marker in (0x00000000, 0xFFFFFFFF):
+                return None
 
-        return struct.unpack_from(self.fmt, rom_bytes, offset)
+        coords = struct.unpack_from(self.fmt, rom_bytes, offset)
+
+        # Validate floats
+        if self.fmt == ">fff":
+            import math
+
+            for c in coords:
+                if not math.isfinite(c):
+                    return None
+                if abs(c) > 50000:
+                    return None
+                if 0 < abs(c) < 1e-30:
+                    return None
+
+        return coords
 
 
 # SM64Lib/SM64Lib/Objects/StarPositionAddress.py

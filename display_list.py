@@ -67,18 +67,6 @@ class Disassembler:
         return record
 
 
-def _SHIFTR(val: int, shift: int, size: int) -> int:
-    return (val >> shift) & ((1 << size) - 1)
-
-
-def format_params(params: List[Any]) -> str:
-    return ", ".join(map(str, params))
-
-
-def comment_out(text: str) -> str:
-    return text if text.lstrip().startswith("//") else f"// {text}"
-
-
 def push_geometry_mode() -> None:
     geometry_mode_stack.append(current_geometry_mode)
 

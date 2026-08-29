@@ -49,9 +49,6 @@ class Microcode(ABC):
     def _SHIFTR(self, val, shift, size):
         return (val >> shift) & ((1 << size) - 1)
 
-    def format_params(self, params):
-        return ", ".join(map(str, params))
-
     def comment_out(self, text, condition=True):
         if not condition:
             return text

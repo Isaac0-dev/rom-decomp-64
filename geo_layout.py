@@ -5,6 +5,7 @@ from utils import (
     CMD_HHHHHH_unpack_s,
     to_signed16,
     debug_print,
+    debug_fail,
     debug_mode_prefix,
 )
 from typing import Any, Dict, List, Optional, Tuple
@@ -312,16 +313,17 @@ class GeoProcessor(BaseProcessor):
         self.parsed_geos: Dict[Tuple[int, int], Any] = {}
 
     @provenance("Geo Layout")
-    def parse(self, segmented_addr: int, **kwargs: Any) -> str:
+    def parse(self, segmented_addr: int, **kwargs: Any) -> Optional[GeoRecord]:
         sTxt = kwargs.get("txt")
         context_prefix = kwargs.get("context_prefix")
         if not segmented_addr:
-            return "NULL"
+            return None
 
         seg_num = segment_from_addr(segmented_addr)
         segment_info = where_is_segment_loaded(seg_num)
         if segment_info is None:
-            return f"geo_fail_0x{segmented_addr:08X}"
+            debug_fail(f"Failed to find segment {seg_num} for geo layout at 0x{segmented_addr:08x}")
+            return None
 
         start = segment_info[0]
         db_key = (segmented_addr, start)
@@ -337,7 +339,8 @@ class GeoProcessor(BaseProcessor):
 
         data = get_segment(seg_num)
         if data is None:
-            return f"geo_fail_0x{segmented_addr:08X}"
+            debug_fail(f"Failed to load segment {seg_num} for geo layout at 0x{segmented_addr:08x}")
+            return None
 
         _geo_segment_stack.append(seg_num)
         movtex_extractor.scan_segment(seg_num)
@@ -408,6 +411,8 @@ class GeoProcessor(BaseProcessor):
         return self.parsed_geos[cache_key]
 
     def serialize(self, record: GeoRecord) -> str:
+        from utils import script_str
+
         output = f"const GeoLayout {record.name}[] = {{\n"
         for ir in record.commands:
             prefix = "    " * (ir.indent + 1)
@@ -419,7 +424,7 @@ class GeoProcessor(BaseProcessor):
                 (5 * (8 + 1)) + 2 + 4,  # 5 words, 2 spaces and 4 special chars
             )
 
-            params_str = ", ".join(map(str, ir.params))
+            params_str = ", ".join(map(script_str, ir.params))
             output += f"{prefix}{ir.name}({params_str}),\n"
         output += "};"
         if self.ctx.txt:
@@ -475,13 +480,13 @@ def G_CLOSE(ls, i, s, c):
 
 def G_ASSIGN_AS_VIEW(ls, i, s, c):
     index = to_signed16(ls[0] & 0xFFFF)
-    return CommandIR(0x06, [index], name="GEO_ASSIGN_AS_VIEW"), False, i
+    return CommandIR(0x06, [index], name="// GEO_ASSIGN_AS_VIEW"), False, i
 
 
 def G_UPDATE_NODE_FLAGS(ls, i, s, c):
     operation = (ls[0] >> 16) & 0xFF
     bits = to_signed16(ls[0] & 0xFFFF)
-    return CommandIR(0x07, [operation, bits], name="GEO_UPDATE_NODE_FLAGS"), False, i
+    return CommandIR(0x07, [operation, bits], name="// GEO_UPDATE_NODE_FLAGS"), False, i
 
 
 def G_SCREEN(ls, i, s, c):

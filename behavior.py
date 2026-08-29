@@ -877,6 +877,8 @@ class BehaviorProcessor(BaseProcessor):
     BLOCK_ENDS = {"END_LOOP", "END_REPEAT", "END_REPEAT_CONTINUE"}
 
     def serialize(self, record: BehaviorRecord) -> str:
+        from utils import script_str
+
         output = f"const BehaviorScript {record.beh_name}[] = " + "{\n"
         indent = 1
         for ir in record.commands:
@@ -884,7 +886,7 @@ class BehaviorProcessor(BaseProcessor):
             if name in self.BLOCK_ENDS:
                 indent -= 1
             indent_str = "    " * indent
-            params_str = ", ".join(map(str, ir.params))
+            params_str = ", ".join(map(script_str, ir.params))
             output += f"{indent_str}{name}({params_str}),\n"
             if name in self.BLOCK_STARTS:
                 indent += 1

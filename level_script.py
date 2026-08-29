@@ -153,12 +153,11 @@ class LevelScriptProcessor(BaseProcessor):
             ctx._pending_record = None
 
     def serialize(self, record: LevelRecord) -> str:
+        from utils import script_str
+
         history_comment = ""
         if hasattr(record, "history") and record.history:
             history_comment = "// " + " -> ".join(record.history[::-1]) + "\n"
-
-        def _param_to_str(p):
-            return "NULL" if p is None else str(p)
 
         output = history_comment
         output += f"const LevelScript {record.name}[] = {{\n"
@@ -174,7 +173,7 @@ class LevelScriptProcessor(BaseProcessor):
                 metadata=f"0x{ir.address:08X}",
             )
 
-            params_str = ", ".join(_param_to_str(p) for p in ir.params)
+            params_str = ", ".join(map(script_str, ir.params))
             output += f"{prefix}{comment}{ir.name}({params_str}),\n"
         output += "};"
         if self.ctx.txt:
