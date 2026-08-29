@@ -4,6 +4,17 @@ from typing import Any, Callable, Dict, List, Set, Optional, TypeVar
 from tweaks import LevelValues, BehaviorValues
 from argparse import Namespace
 
+try:
+    from utils import is_debug_mode as _is_debug_mode  # type: ignore
+
+    _has_debug_check = True
+except Exception:
+
+    def _is_debug_mode():  # type: ignore
+        return False
+
+    _has_debug_check = False
+
 
 @dataclass
 class LevelAreaContext:
@@ -33,6 +44,11 @@ def provenance(kind: str) -> Callable[[F], F]:
     def decorator(fn: F) -> F:
         @functools.wraps(fn)  # make sure to keep the same function name from the original
         def wrapper(self, segmented_addr: int, *args: Any, **kwargs: Any):
+            if _has_debug_check and not _is_debug_mode():
+                return fn(self, segmented_addr, *args, **kwargs)
+            if not _has_debug_check:
+                return fn(self, segmented_addr, *args, **kwargs)
+
             outermost = not ctx.parse_stack
             if outermost:
                 ctx.last_failure_chain = (
@@ -116,14 +132,41 @@ class ExtractionContext:
 
     cmd_bytes: bytes = b""
 
+    # Cache for current_context_prefix to avoid recomputing every time
+    _context_prefix_cache: Dict[tuple, Optional[str]] = field(default_factory=dict)  # type: ignore
+    _context_prefix_cache_key: Optional[tuple] = None  # type: ignore
+    _context_prefix_cached_value: Optional[str] = None  # type: ignore
+
     @property
     def current_context_prefix(self) -> Optional[str]:
+
+        # Check cache for speed
+        key = tuple(self.level_script_tracker)
+        if key == self._context_prefix_cache_key:
+            return self._context_prefix_cached_value
+        if key in self._context_prefix_cache:
+            val = self._context_prefix_cache[key]
+            self._context_prefix_cache_key = key
+            self._context_prefix_cached_value = val
+            return val
+
+        # Compute the context prefix
         context_parts = [
             p
             for p in self.level_script_tracker
             if p != "script_exec_level_table" and "script_0x" not in p
         ]
-        return "_".join(context_parts) if context_parts else None
+        val = "_".join(context_parts) if context_parts else None
+
+        # Cache the value
+        self._context_prefix_cache[key] = val
+        self._context_prefix_cache_key = key
+        self._context_prefix_cached_value = val
+        if len(self._context_prefix_cache) > 512:
+            items = list(self._context_prefix_cache.items())[-256:]
+            self._context_prefix_cache = dict(items)
+
+        return val
 
     def format_parse_chain(self) -> str:
         if not self.parse_stack:
