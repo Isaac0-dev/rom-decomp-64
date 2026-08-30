@@ -43,7 +43,7 @@ const pythonFiles = [
     'compression_util/__init__.py', 'compression_util/compression.py', 'compression_util/rnc.py',
     'function_matching/extractor.py', 'function_matching/generator.py', 'function_matching/matcher.py', 'function_matching/mips_utils.py',
     'data/expected_pairings.py', 'data/__init__.py',
-    'tools/generate_behavior_hashes.py', 'tools/gen_traj_hashes.py', 'tools/gen_vanilla_database.py'
+    'tools/generate_behavior_hashes.py', 'tools/gen_traj_hashes.py', 'tools/gen_vanilla_database.py', 'paintings.py'
 ];
 
 const dataFiles = [
