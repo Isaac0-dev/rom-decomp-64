@@ -647,17 +647,6 @@ def install_error_hooks() -> None:
 
 def exception(msg: str) -> None:
     msg = add_provenance(msg)
-    if is_debugger():
-        raise ExtractionError(msg)
-
-    exc_type, exc_value, exc_tb = sys.exc_info()
-    if exc_type is not None:
-        logger.error(msg, exc_info=sys.exc_info())
-    else:
-        # Note: traceback format_stack gets stack inside exception/debug_fail itself,
-        # so logging handles this cleanly with logger.error
-        logger.error(msg, stack_info=True)
-
     raise ExtractionError(msg)
 
 

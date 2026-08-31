@@ -16,6 +16,7 @@ from segment import (
     where_is_segment_loaded,
     get_segment,
     get_loaded_segment_numbers,
+    segmented_to_virtual,
 )
 from byteio import CustomBytesIO
 import hashlib
@@ -332,7 +333,10 @@ class GeoProcessor(BaseProcessor):
         if self.ctx.db and db_key in self.ctx.db.geos:
             return self.ctx.db.geos[db_key]
 
-        offset = offset_from_segment_addr(segmented_addr)
+        if seg_num == 0:
+            offset = segmented_to_virtual(segmented_addr)
+        else:
+            offset = offset_from_segment_addr(segmented_addr)
         cache_key = (offset, start)
         if cache_key in self.parsed_geos:
             return self.parsed_geos[cache_key]
@@ -363,7 +367,7 @@ class GeoProcessor(BaseProcessor):
             w0 = rom.read_u32()
             opcode = (w0 >> 24) & 0xFF
             if opcode not in geo_command_table:
-                debug_print(
+                print(
                     f"UNRECOGNISED GEO OP {opcode:02X} at 0x{segmented_addr + pos - offset:08X}"
                 )
                 break

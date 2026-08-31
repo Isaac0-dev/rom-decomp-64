@@ -39,12 +39,7 @@ class AddressMap:
             return
 
         if map_path is None:
-            # Get map from path in this directory
             map_path = "sm64.us.map"
-            if not os.path.exists(map_path):
-                # Try sibling directory as suggested by user in memory
-                # But here it's in the root according to file tree.
-                pass
 
         self.map_path = map_path
         self.addr_to_symbol: Dict[int, List[str]] = {}

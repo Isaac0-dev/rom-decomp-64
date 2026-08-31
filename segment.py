@@ -454,7 +454,7 @@ def segmented_to_virtual(segmented_addr: int) -> int:
     if seg_num == 0:  # address is already physical
         offset = segmented_addr & 0x00FFFFFF
         if offset > 0x005F0000 and offset < 0x00620000:
-            return offset + 0x001E0000
+            return offset + 0x001E0000  # MOP model offsets
         if offset > 0x00400000 and offset < 0x00420000:
             return 0x01200000 + (segmented_addr & 0x000FFFFF)
         if offset < 0x00800000:

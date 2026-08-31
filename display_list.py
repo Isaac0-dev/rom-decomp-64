@@ -6,6 +6,7 @@ from segment import (
     offset_from_segment_addr,
     segment_from_addr,
     where_is_segment_loaded,
+    segmented_to_virtual,
 )
 from typing import Any, Dict, List, Optional
 import struct
@@ -197,12 +198,15 @@ class DisplayListProcessor(BaseProcessor):
             self.re_simulate_side_effects(record, sTxt)
             return record
 
-        offset = offset_from_segment_addr(segmented_addr)
         data = get_segment(seg_num)
         if data is None:
             debug_print(f"Failed to get segment data for address 0x{segmented_addr:08X}")
             return None
 
+        if seg_num == 0:
+            offset = segmented_to_virtual(segmented_addr)
+        else:
+            offset = offset_from_segment_addr(segmented_addr)
         if offset >= len(data):
             debug_print(
                 f"Segment data is too small for the given offset for address 0x{segmented_addr:08X}"

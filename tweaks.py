@@ -60,7 +60,6 @@ class LevelValues(TweakableValues):
     # appear in tweaks.lua if their values differ from the default.
     LUA_TABLE_NAME = "gLevelValues"
     TWEAKS = {
-        # No ROM backing; manually set by the user when needed.
         "lowest_vtx_height": {
             "default": -11000,
             "lua_name": "floorLowerLimit",
@@ -69,7 +68,6 @@ class LevelValues(TweakableValues):
             "default": 20000,
             "lua_name": "cellHeightLimit",
         },
-        # Entry level: read from ROM at 0x6D6A (big-endian u16) when available.
         "entry_level": {
             "default": level_const_name_to_int["LEVEL_CASTLE_GROUNDS"],
             "lua_name": "entryLevel",
@@ -77,7 +75,6 @@ class LevelValues(TweakableValues):
             "type": ">H",
             "addr": 0x6D6A,
             "len": 2,
-            # Only read entry_level when the ROM contains the expected marker at 0x6D68
             "guard": {"addr": 0x6D68, "bytes": b"\x24\x05"},
         },
         "wing_cap_duration": {
