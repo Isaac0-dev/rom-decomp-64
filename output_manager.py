@@ -103,7 +103,7 @@ class OutputManager:
             filename = "model.inc.c"
         elif "geo" in context:
             filename = "geo.inc.c"
-        elif "trajectory" in context:
+        elif "trajectory" in context or "metal_ball" in context:
             filename = "trajectory.inc.c"
         elif "collision" in context:
             filename = "collision.inc.c"
@@ -188,6 +188,8 @@ class OutputManager:
 
     def write(self, ctx, type, context, content):
         with self.lock:
+            if type == "trajectory" and "trajectory" not in context and "metal_ball" not in context:
+                context = f"trajectory_{context}"  # fix trajectory context
             rel_path = self.get_target_path(context, ctx)
             filepath = os.path.join(self.base_path, rel_path)
             f = self._get_file_handle(filepath)
