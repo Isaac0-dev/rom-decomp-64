@@ -172,6 +172,18 @@ geo_camera_callbacks: List[str] = ["geo_camera_main"]
 geo_camera_frustum_callbacks: List[str] = ["geo_camera_fov"]
 
 
+def get_layer_name(layer: int) -> str:
+    if ctx.db and ctx.db.meta.hack_type == "HackerSM64":
+        layer_swap_hacker_sm64 = {
+            2: 3,
+            3: 2,
+            5: 6,
+            6: 5,
+        }
+        layer = layer_swap_hacker_sm64.get(layer, layer)
+    return str(LAYER_NAMES.get(layer, layer))
+
+
 def get_dl_name(addr: int, sTxt: Any, context_prefix: Optional[str]) -> Any:
     if not addr:
         return "NULL"
@@ -551,7 +563,7 @@ def G_CAM(ls, i, s, c):
 def G_TRANS_ROT(ls, i, s, c):
     param = (ls[0] >> 16) & 0xFF
     layer = param & 0xF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     p = param & 0x70
     if p == 0x30:  # ROT_Y
         ry = to_signed16(ls[1] & 0xFFFF)
@@ -602,7 +614,7 @@ def G_TRANS_ROT(ls, i, s, c):
 def G_TRANS_NODE(ls, i, s, c):
     param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     x = to_signed16(ls[0] & 0xFFFF)
     y, z = CMD_HH_unpack_s(ls[1])
     if param & 0x80 and len(ls) > 2:
@@ -618,7 +630,7 @@ def G_TRANS_NODE(ls, i, s, c):
 def G_ROT_NODE(ls, i, s, c):
     param = (ls[0] >> 16) & 0xFF
     layer = param & 0xF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     x = to_signed16(ls[0] & 0xFFFF)
     y, z = CMD_HH_unpack_s(ls[1])
     if param & 0x80 and len(ls) > 2:
@@ -633,7 +645,7 @@ def G_ROT_NODE(ls, i, s, c):
 
 def G_ANIM(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     tx = to_signed16(ls[0] & 0xFFFF)
     ty, tz = CMD_HH_unpack_s(ls[1])
     dl = get_dl_name(ls[2], s, c)
@@ -643,7 +655,7 @@ def G_ANIM(ls, i, s, c):
 def G_BILL_PARAMS(ls, i, s, c):
     param = (ls[0] >> 8) & 0xFF
     layer = param & 0xF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     tx = to_signed16(ls[0] & 0xFFFF)
     ty, tz = CMD_HH_unpack_s(ls[1])
     if param == 0 and tx == 0 and ls[1] == 0:
@@ -663,7 +675,7 @@ def G_BILL_PARAMS(ls, i, s, c):
 
 def G_DL(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     dl = get_dl_name(ls[1], s, c)
     return CommandIR(0x15, [layer_name, dl], name="GEO_DISPLAY_LIST"), False, i
 
@@ -748,7 +760,7 @@ def G_HELD_OBJECT(ls, i, s, c):
 def G_SCALE(ls, i, s, c):
     param = (ls[0] >> 16) & 0xFF
     layer = param & 0xF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     scale = ls[1]
     if param & 0x80:
         dl = get_dl_name(ls[2], s, c)
@@ -775,7 +787,7 @@ def G_NOP_1F(ls, i, s, c):
 
 def G_BONE(ls, i, s, c):
     layer = (ls[0] >> 16) & 0xFF
-    layer_name = LAYER_NAMES.get(layer, layer)
+    layer_name = get_layer_name(layer)
     tx = to_signed16((ls[1] >> 16) & 0xFFFF)
     ty = to_signed16(ls[1] & 0xFFFF)
     tz = to_signed16((ls[2] >> 16) & 0xFFFF)
