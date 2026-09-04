@@ -687,5 +687,6 @@ def offset_from_segment_addr(addr: int) -> int:
         )
     return offset
 
+
 def script_str(p):
     return "NULL" if p is None else str(p)

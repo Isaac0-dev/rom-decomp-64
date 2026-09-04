@@ -379,9 +379,7 @@ class GeoProcessor(BaseProcessor):
             w0 = rom.read_u32()
             opcode = (w0 >> 24) & 0xFF
             if opcode not in geo_command_table:
-                print(
-                    f"UNRECOGNISED GEO OP {opcode:02X} at 0x{segmented_addr + pos - offset:08X}"
-                )
+                print(f"UNRECOGNISED GEO OP {opcode:02X} at 0x{segmented_addr + pos - offset:08X}")
                 break
 
             try:
