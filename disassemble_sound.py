@@ -268,6 +268,8 @@ def parse_envelope(addr, data_bank):
 
 
 def parse_ctl_header(header):
+    if len(header) < 16:
+        raise ValueError(f"CTL header too short: {len(header)} < 16")
     num_instruments, num_drums, shared = struct.unpack(">III", header[:12])
     date = parse_bcd(header[12:])
     y = date // 10000
@@ -287,6 +289,8 @@ def parse_ctl(parsed_header, data, sample_bank, index, is_shindou):
     name = "{:02X}".format(index)
     num_instruments, num_drums, iso_date = parsed_header
 
+    if len(data) < 4:
+        raise ValueError(f"CTL bank {index} data too short ({len(data)} < 4)")
     (drum_base_addr,) = struct.unpack(">I", data[:4])
     drum_addrs = []
     if num_drums != 0:
@@ -305,6 +309,10 @@ def parse_ctl(parsed_header, data, sample_bank, index, is_shindou):
             debug_print(f"WARNING: drum_base_addr is 0x{drum_base_addr:X} but num_drums is 0")
 
     inst_base_addr = 4
+    if len(data) < inst_base_addr + num_instruments * 4:
+        raise ValueError(
+            f"CTL bank {index} truncated: need {inst_base_addr + num_instruments*4} bytes for inst table, have {len(data)}"
+        )
     inst_addrs = []
     inst_list: List[Optional[int]] = []
     for i in range(num_instruments):
@@ -333,10 +341,14 @@ def parse_ctl(parsed_header, data, sample_bank, index, is_shindou):
 
     insts = []
     for inst_addr in inst_addrs:
+        if inst_addr + 32 > len(data):
+            raise ValueError(f"Inst at 0x{inst_addr:X} out of bounds (len {len(data)})")
         insts.append(parse_inst(data[inst_addr : inst_addr + 32], inst_addr))
 
     drums = []
     for drum_addr in drum_addrs:
+        if drum_addr != 0 and drum_addr + 16 > len(data):
+            raise ValueError(f"Drum at 0x{drum_addr:X} out of bounds (len {len(data)})")
         drums.append(parse_drum(data[drum_addr : drum_addr + 16], drum_addr))
 
     env_addrs = set()
@@ -742,10 +754,21 @@ def main(*Fargs):
         ):
             if index == 13 and ExtC:
                 break
+            if offset + length > len(ctl_data):
+                debug_print(f"Skipping ctl bank {index}: entry 0x{offset:X}+0x{length:X} out of bounds")
+                continue
+            if length < 16:
+                debug_print(f"Skipping ctl bank {index}: entry too short ({length})")
+                continue
             sample_bank = sample_bank_map[sample_bank_name]
             entry = ctl_data[offset : offset + length]
             header = parse_ctl_header(entry[:16])
-            banks.append(parse_ctl(header, entry[16:], sample_bank, index, False))
+            try:
+                banks.append(parse_ctl(header, entry[16:], sample_bank, index, False))
+            except Exception as e:
+                debug_print(f"Skipping ctl bank {index} due to parse error: {e}")
+                print(f"Warning: skipping malformed sound bank {index}: {e}")
+                continue
 
     # Special mode used for asset extraction: generate aifc files, with paths
     # given by command line arguments

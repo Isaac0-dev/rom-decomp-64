@@ -8,7 +8,7 @@ import disassemble_sound
 from base_processor import BaseProcessor
 from context import ctx
 from rom_database import AudioRecord, AudioSequenceRecord
-from utils import debug_print, find_all_needles_in_haystack, read_int, get_rom
+from utils import debug_print, read_int, get_rom
 
 
 # Translation map for extended sound bank instrument indices
@@ -414,6 +414,25 @@ def is_valid_alseq_header_bytes(rom_bytes: bytes, offset: int) -> bool:
             return False
         if not (0 < first_len < 0x20000):
             return False
+
+        expected_first = (4 + seq_count * 8 + 15) & ~15
+        if first_offset != expected_first:
+            return False
+
+        # Validate all entries to weed out random matches that happen to
+        # have a plausible first entry
+        rom_len = len(rom_bytes)
+        for i in range(seq_count):
+            off = struct.unpack_from(">I", rom_bytes, offset + 4 + i * 8)[0]
+            length = struct.unpack_from(">I", rom_bytes, offset + 4 + i * 8 + 4)[0]
+            if off == 0 and length == 0:
+                continue
+            if off < expected_first or off >= 0x100000:
+                return False
+            if length <= 0 or length >= 0x20000:
+                return False
+            if offset + off + length > rom_len:
+                return False
         return True
     except Exception:
         return False
@@ -446,6 +465,26 @@ def analyze_alseq_file_header(rom: Any, offset: int) -> Optional[Tuple[int, int,
             return None
         if not (0 < first_len < 0x20000):
             return None
+        expected_first = (4 + seq_count * 8 + 15) & ~15
+        if first_offset != expected_first:
+            return None
+
+        # Full table validation (same as is_valid_alseq_header_bytes)
+        try:
+            rom_len = len(rom.getvalue())  # type: ignore[attr-defined]
+        except Exception:
+            rom_len = offset + first_offset + first_len + 0x100000  # permissive fallback
+        for i in range(seq_count):
+            off = struct.unpack_from(">I", header_entries_bytes, i * 8)[0]
+            length = struct.unpack_from(">I", header_entries_bytes, i * 8 + 4)[0]
+            if off == 0 and length == 0:
+                continue
+            if off < expected_first or off >= 0x100000:
+                return None
+            if length <= 0 or length >= 0x20000:
+                return None
+            if offset + off + length > rom_len:
+                return None
 
         header_content = header_start_bytes + header_entries_bytes
         header_hash = hashlib.md5(header_content).hexdigest()
@@ -673,22 +712,60 @@ def get_audio_processor() -> AudioProcessor:
     return _audio_processor
 
 
+def _find_valid_ctl_tbl(rom_bytes: bytes, revision: int) -> int:
+    import re
+
+    # Build regex for the specific revision: byte 0 = 0x00, byte1 = rev, byte2=0x00, byte3=0x0A-0x64
+    pat = re.compile(bytes([0x00, revision, 0x00]) + b"[\x0a-\x64]")
+    best_off = -1
+    best_count = -1
+    for m in pat.finditer(rom_bytes):
+        off = m.start()
+        if off % 4 != 0:
+            continue
+        if off < 0x400000 and off < 0x100000:
+            continue
+        if off + 12 > len(rom_bytes):
+            continue
+        try:
+            if is_valid_alseq_header_bytes(rom_bytes, off):
+                cnt = struct.unpack_from(">H", rom_bytes, off + 2)[0]
+                if cnt > best_count or (cnt == best_count and (best_off == -1 or off < best_off)):
+                    best_count = cnt
+                    best_off = off
+        except Exception:
+            continue
+    return best_off
+
+
 def extract_sound(rom: Any, txt: Any, output_dir: str, ctl_offset: int, tbl_offset: int) -> None:
     sampledir = os.path.join(output_dir, "sound")
     os.makedirs(sampledir, exist_ok=True)
 
-    # If offsets weren't found via ALSeqFile detection, try to find them via signature or vanilla fallback
-    if ctl_offset == -1:
-        ctl_header_bytes = b"\x00\x01\x00\x26\x00\x00\x01\x40\x00\x00\x04\x20\x00\x00\x05\x60"
-        ctl_header_matches = find_all_needles_in_haystack(rom, ctl_header_bytes)
-        if len(ctl_header_matches) > 0:
-            ctl_offset = ctl_header_matches[0]
+    # Validate any provided offsets
+    try:
+        rom_bytes = rom.getvalue()  # type: ignore[attr-defined]
+    except Exception:
+        rom.seek(0)
+        rom_bytes = rom.read()
+        rom.seek(0)
+    if ctl_offset != -1 and not is_valid_alseq_header_bytes(rom_bytes, ctl_offset):
+        debug_print(f"Rejecting ctl_offset 0x{ctl_offset:08X} failed validation, falling back")
+        ctl_offset = -1
+    if tbl_offset != -1 and not is_valid_alseq_header_bytes(rom_bytes, tbl_offset):
+        debug_print(f"Rejecting tbl_offset 0x{tbl_offset:08X} failed validation, falling back")
+        tbl_offset = -1
 
+    if ctl_offset == -1:
+        ctl_offset = _find_valid_ctl_tbl(rom_bytes, 1)
+        if ctl_offset != -1:
+            cnt = struct.unpack_from(">H", rom_bytes, ctl_offset + 2)[0]
+            debug_print(f"Fallback validated ctl at 0x{ctl_offset:08X} ({cnt} banks)")
     if tbl_offset == -1:
-        tbl_header_bytes = b"\x00\x02\x00\x26\x00\x00\x01\x40\x00"
-        tbl_header_matches = find_all_needles_in_haystack(rom, tbl_header_bytes)
-        if len(tbl_header_matches) > 0:
-            tbl_offset = tbl_header_matches[0]
+        tbl_offset = _find_valid_ctl_tbl(rom_bytes, 2)
+        if tbl_offset != -1:
+            cnt = struct.unpack_from(">H", rom_bytes, tbl_offset + 2)[0]
+            debug_print(f"Fallback validated tbl at 0x{tbl_offset:08X} ({cnt} banks)")
 
     # Final vanilla fallbacks if all else fails
     if ctl_offset == -1 or tbl_offset == -1:
@@ -697,23 +774,42 @@ def extract_sound(rom: Any, txt: Any, output_dir: str, ctl_offset: int, tbl_offs
         region = rom.read(1)
         if region == b"E":  # US
             if ctl_offset == -1:
-                ctl_offset = 0x57B720
+                cand = 0x57B720
+                if cand < len(rom_bytes) and is_valid_alseq_header_bytes(rom_bytes, cand):
+                    ctl_offset = cand
             if tbl_offset == -1:
-                tbl_offset = 0x593560
+                cand = 0x593560
+                if cand < len(rom_bytes) and is_valid_alseq_header_bytes(rom_bytes, cand):
+                    tbl_offset = cand
         elif region == b"J":  # JP
             if ctl_offset == -1:
-                ctl_offset = 0x5491D0
+                cand = 0x5491D0
+                if cand < len(rom_bytes) and is_valid_alseq_header_bytes(rom_bytes, cand):
+                    ctl_offset = cand
             if tbl_offset == -1:
-                tbl_offset = 0x55F9B0
+                cand = 0x55F9B0
+                if cand < len(rom_bytes) and is_valid_alseq_header_bytes(rom_bytes, cand):
+                    tbl_offset = cand
         elif region == b"P":  # EU
             if ctl_offset == -1:
-                ctl_offset = 0x539920
+                cand = 0x539920
+                if cand < len(rom_bytes) and is_valid_alseq_header_bytes(rom_bytes, cand):
+                    ctl_offset = cand
             if tbl_offset == -1:
-                tbl_offset = 0x54F210
+                cand = 0x54F210
+                if cand < len(rom_bytes) and is_valid_alseq_header_bytes(rom_bytes, cand):
+                    tbl_offset = cand
         else:
             debug_print(
                 f"Couldn't find offsets for sound extraction! (ctl=0x{ctl_offset:X}, tbl=0x{tbl_offset:X}) {region}"
             )
+            return
+        if ctl_offset == -1 or tbl_offset == -1:
+            print(
+                f"Skipping sound bank extraction: no validated ctl/tbl found "
+                f"(ctl=0x{ctl_offset:X}, tbl=0x{tbl_offset:X})"
+            )
+            debug_print("No validated ctl/tbl, skipping to avoid garbage huge files")
             return
 
     print(f"Extracting sounds (ctl=0x{ctl_offset:08X}, tbl=0x{tbl_offset:08X})")
