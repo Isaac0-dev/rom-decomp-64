@@ -650,6 +650,10 @@ def inst_ifdef_json(bank_index, inst_index):
 
 
 def main(*Fargs):
+    global ExtC
+    ExtC = False
+    name_tbl.clear()
+
     args = []
     need_help = False
     only_samples = False
@@ -720,7 +724,16 @@ def main(*Fargs):
     else:
         ctl_entries = parse_seqfile(ctl_data, TYPE_CTL)
         tbl_entries = parse_seqfile(tbl_data, TYPE_TBL)
-        assert len(ctl_entries) == len(tbl_entries)
+        if len(ctl_entries) != len(tbl_entries):
+            debug_print(
+                f"ctl ({len(ctl_entries)} entries) / tbl ({len(tbl_entries)} entries) "
+                f"mismatch, skipping sound bank extraction"
+            )
+            print(
+                f"Warning: ctl/tbl entry count mismatch "
+                f"({len(ctl_entries)} vs {len(tbl_entries)}), skipping sound banks"
+            )
+            return
 
         tbls, sample_banks, sample_bank_map = parse_tbl(tbl_data, tbl_entries)
 

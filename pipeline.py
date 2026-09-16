@@ -77,6 +77,12 @@ class ExtractionPipeline:
         Returns 0 on success, non-zero on error (same as old main()).
         """
         install_error_hooks()
+        try:
+            from audio import reset_audio_state
+
+            reset_audio_state()
+        except Exception:
+            pass
         self.pass_init()
         self.pass_emulate()  # n64js: detect seg2, microcode, alseq
         self.pass_audio()  # extract ALSeqFile data
@@ -354,37 +360,35 @@ class ExtractionPipeline:
             if hasattr(host_obj, "found_alseq_headers") and host_obj.found_alseq_headers:
                 self._alseq_candidates = host_obj.found_alseq_headers
                 self.db.audio.alseq_candidates = host_obj.found_alseq_headers
-                from audio import get_audio_processor
-
-                ap = get_audio_processor()
-                for offset in host_obj.found_alseq_headers:
-                    ap.parse(offset)
             else:
                 debug_print(
                     "Emulator did not find audio sequences, scanning ROM for ALSeqFile headers..."
                 )
-                # Match the desktop emulator's PI DMA heuristic: revision <= 5,
-                # seq_count between 10 and 100.  This avoids the thousands of
-                # false positives that come from random data in the 1-256 range.
-                scan_start = min(0x500000, len(rom_data))
-                scan_end = min(0x700000, len(rom_data))
+                from audio import is_valid_alseq_header_bytes
+
+                scan_start = 0x400000
+                if scan_start >= len(rom_data):
+                    scan_start = 0
                 alseq_candidates = []
-                for offset in range(scan_start, scan_end - 4, 4):
+                for offset in range(scan_start, len(rom_data) - 12, 4):
+                    # Quick filter for general structure, will be validated later
                     revision = struct.unpack(">H", rom_data[offset : offset + 2])[0]
                     if revision < 1 or revision > 5:
                         continue
                     seq_count = struct.unpack(">H", rom_data[offset + 2 : offset + 4])[0]
-                    if 10 <= seq_count <= 100:
+                    if not 10 <= seq_count <= 100:
+                        continue
+                    if is_valid_alseq_header_bytes(rom_data, offset):
                         alseq_candidates.append(offset)
                 if alseq_candidates:
                     debug_print(
-                        f"Found {len(alseq_candidates)} ALSeqFile header candidates near 0x{scan_start:X}-0x{scan_end:X}"
+                        f"Found {len(alseq_candidates)} ALSeqFile header candidates near 0x{scan_start:X}-0x{len(rom_data):X}"
                     )
                     self._alseq_candidates = alseq_candidates
                     self.db.audio.alseq_candidates = alseq_candidates
                 else:
                     debug_print("No ALSeqFile headers found, falling back to signature scan...")
-                    from audio import extract_sound, get_audio_processor
+                    from audio import extract_sound
 
                     extract_sound(self.rom, self.txt, self.txt.base_path, -1, -1)
                     if self.db.audio.sequences:

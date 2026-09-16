@@ -379,6 +379,45 @@ def get_sequence_volume(data: bytes) -> Optional[int]:
 extracted_offsets: List[int] = []
 extracted_headers_hash: Set[str] = set()
 
+MAX_SEQUENCE_LEN = 0x20000
+
+
+def reset_audio_state() -> None:
+    global _audio_processor
+    extracted_offsets.clear()
+    extracted_headers_hash.clear()
+    _audio_processor = None
+    try:
+        import disassemble_sound
+
+        disassemble_sound.ExtC = False
+        disassemble_sound.name_tbl.clear()
+    except Exception:
+        pass
+
+
+def is_valid_alseq_header_bytes(rom_bytes: bytes, offset: int) -> bool:
+    try:
+        if offset < 0 or offset + 12 > len(rom_bytes):
+            return False
+        revision = struct.unpack_from(">H", rom_bytes, offset)[0]
+        seq_count = struct.unpack_from(">H", rom_bytes, offset + 2)[0]
+        if revision > 5 or revision < 1:
+            return False
+        if seq_count < 10 or seq_count > 100:
+            return False
+        if offset + 4 + seq_count * 8 > len(rom_bytes):
+            return False
+        first_offset = struct.unpack_from(">I", rom_bytes, offset + 4)[0]
+        first_len = struct.unpack_from(">I", rom_bytes, offset + 8)[0]
+        if not (0 < first_offset < 0x100000):
+            return False
+        if not (0 < first_len < 0x20000):
+            return False
+        return True
+    except Exception:
+        return False
+
 
 def analyze_alseq_file_header(rom: Any, offset: int) -> Optional[Tuple[int, int, str]]:
     try:
@@ -393,7 +432,21 @@ def analyze_alseq_file_header(rom: Any, offset: int) -> Optional[Tuple[int, int,
         if seq_count > 256:
             return None
 
+        if revision < 1 or revision > 5:
+            return None
+        if seq_count < 10 or seq_count > 100:
+            return None
+
         header_entries_bytes = rom.read(seq_count * 8)
+        if len(header_entries_bytes) < seq_count * 8:
+            return None
+        first_offset = struct.unpack(">I", header_entries_bytes[0:4])[0]
+        first_len = struct.unpack(">I", header_entries_bytes[4:8])[0]
+        if not (0 < first_offset < 0x100000):
+            return None
+        if not (0 < first_len < 0x20000):
+            return None
+
         header_content = header_start_bytes + header_entries_bytes
         header_hash = hashlib.md5(header_content).hexdigest()
 
@@ -416,8 +469,8 @@ def extract_alseq_file_data(rom: Any, txt: Any, candidates: List[int], output_di
 
     print(f"Analyzing {len(unique_candidates)} sequence header candidates...")
 
-    ctl_offset = -1
-    tbl_offset = -1
+    ctl_candidates: List[Tuple[int, int]] = []  # (offset, count)
+    tbl_candidates: List[Tuple[int, int]] = []
     for offset in unique_candidates:
         info = analyze_alseq_file_header(rom, offset)
         if info:
@@ -425,14 +478,40 @@ def extract_alseq_file_data(rom: Any, txt: Any, candidates: List[int], output_di
             print(f"  Candidate 0x{offset:08X}: Rev {revision}, {count} sequences")
 
             if revision == 1:
-                ctl_offset = offset
+                ctl_candidates.append((offset, count))
             elif revision == 2:
-                tbl_offset = offset
+                tbl_candidates.append((offset, count))
             elif revision == 3:
                 # Prioritize higher sequence count for the actual sequence data
                 if count > best_count:
                     best_count = count
                     best_candidate = offset
+        else:
+            debug_print(f"  Rejected candidate 0x{offset:08X} (failed validation)")
+
+    ctl_offset = -1
+    tbl_offset = -1
+    if ctl_candidates and tbl_candidates:
+        best_pair = None
+        best_pair_count = -1
+        for c_off, c_count in ctl_candidates:
+            for t_off, t_count in tbl_candidates:
+                if c_count == t_count and c_count > best_pair_count:
+                    best_pair_count = c_count
+                    best_pair = (c_off, t_off)
+        if best_pair is not None:
+            ctl_offset, tbl_offset = best_pair
+        else:
+            debug_print(
+                f"No matching ctl/tbl pair among {len(ctl_candidates)} ctl "
+                f"and {len(tbl_candidates)} tbl candidates; using fallback scan"
+            )
+    elif ctl_candidates:
+        ctl_candidates.sort(key=lambda x: (-x[1], x[0]))
+        ctl_offset = ctl_candidates[0][0]
+    elif tbl_candidates:
+        tbl_candidates.sort(key=lambda x: (-x[1], x[0]))
+        tbl_offset = tbl_candidates[0][0]
 
     ap = get_audio_processor()
     extract_sound(rom, txt, output_dir, ctl_offset, tbl_offset)
@@ -502,6 +581,12 @@ class AudioProcessor(BaseProcessor):
                 continue
 
             if offset is None or length is None:
+                continue
+
+            if length <= 0 or length > MAX_SEQUENCE_LEN:
+                debug_print(
+                    f"Warning: Sequence {i} has implausible length 0x{length:X}, skipping"
+                )
                 continue
             abs_offset = header_offset + offset
 
