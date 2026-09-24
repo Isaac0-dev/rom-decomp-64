@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Set, Optional, TypeVar
 from tweaks import LevelValues, BehaviorValues
 from argparse import Namespace
+from rom_region_map import RomRegionMap
 
 try:
     from utils import is_debug_mode as _is_debug_mode  # type: ignore
@@ -111,6 +112,8 @@ class ExtractionContext:
 
     parse_stack: List[ParseFrame] = field(default_factory=list)
     last_failure_chain: Optional[str] = None
+
+    region_map: RomRegionMap = field(default_factory=RomRegionMap)
 
     callers_map: Dict[int, Set[str]] = field(default_factory=dict)
     global_candidates: Set[int] = field(default_factory=set)

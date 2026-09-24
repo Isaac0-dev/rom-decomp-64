@@ -130,6 +130,12 @@ class LevelScriptProcessor(BaseProcessor):
                 if not continueParsing:
                     break
 
+            loaded_seg = where_is_segment_loaded(segment_num)
+            if loaded_seg is not None:
+                self.claim_parsed_region(
+                    "Level Script", segmented_addr, loaded_seg[0], seg_offset, rom.tell()
+                )
+
             if ctx.deferred and ctx.deferred.records:
                 ctx.deferred.post_process()
 

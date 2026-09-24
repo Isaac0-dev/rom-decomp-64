@@ -228,6 +228,10 @@ class DisplayListProcessor(BaseProcessor):
             force_microcode=forced,
         )
 
+        self.claim_parsed_region(
+            "Display List", segmented_addr, start, offset, offset + 8 * len(commands)
+        )
+
         record = DisplayListRecord(
             seg_addr=segmented_addr,
             name=dl_name,

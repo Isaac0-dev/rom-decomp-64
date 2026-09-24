@@ -77,6 +77,7 @@ class ExtractionPipeline:
         Returns 0 on success, non-zero on error (same as old main()).
         """
         install_error_hooks()
+        ctx.region_map.reset()
         try:
             from audio import reset_audio_state
 

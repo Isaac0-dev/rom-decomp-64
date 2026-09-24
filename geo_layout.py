@@ -406,6 +406,8 @@ class GeoProcessor(BaseProcessor):
 
         _geo_segment_stack.pop()
 
+        self.claim_parsed_region("Geo Layout", segmented_addr, start, offset, rom.tell())
+
         h = structural_hash_geo(commands_data, script_start=segmented_addr)
 
         # Identity logic

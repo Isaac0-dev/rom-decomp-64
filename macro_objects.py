@@ -130,6 +130,7 @@ class MacroObjectProcessor(BaseProcessor):
             return None
 
         start, _ = segment_info
+        self.claim_parsed_region("Macro Objects", segmented_addr, start, offset, pos)
         record = MacroRecord(
             addr=segmented_addr,
             name=macro_list_name,

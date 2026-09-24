@@ -506,6 +506,8 @@ class CollisionProcessor(BaseProcessor):
         rom.seek(offset)
         commands_ir, surface_count = parse_collision_data_to_ir(rom, is_behavior)
 
+        self.claim_parsed_region("Collision", segmented_addr, start, offset, rom.tell())
+
         name = f"collision_0x{segmented_addr:08X}"
         if is_behavior:
             name = f"collision_bhv_0x{segmented_addr:08X}"

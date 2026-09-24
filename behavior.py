@@ -842,6 +842,8 @@ class BehaviorProcessor(BaseProcessor):
         fuzzy_hash = structural_hash_behavior_fuzzy(commands_data, script_start=segmented_addr)
         anon_hash = structural_hash_behavior_anonymous(commands_data, script_start=segmented_addr)
 
+        self.claim_parsed_region("Behavior Script", segmented_addr, seg_start, offset, rom.tell())
+
         # Placeholder name for initial discovery.
         # Final identification happens in a refinement pass (db_passes.py).
         name = f"bhv_unknown_{segmented_addr:08X}"
