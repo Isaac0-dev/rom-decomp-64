@@ -623,9 +623,7 @@ class AudioProcessor(BaseProcessor):
                 continue
 
             if length <= 0 or length > MAX_SEQUENCE_LEN:
-                debug_print(
-                    f"Warning: Sequence {i} has implausible length 0x{length:X}, skipping"
-                )
+                debug_print(f"Warning: Sequence {i} has implausible length 0x{length:X}, skipping")
                 continue
             abs_offset = header_offset + offset
 

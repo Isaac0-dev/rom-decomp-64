@@ -285,10 +285,22 @@ class GBI2(GBI1):
 
     def execute_bg_rect_1cyc(self, cmd0, cmd1, dis):
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0]}
+            )
             dis.set_cmd("gSPBgRect1Cyc", {}, commented_out=True)
 
     def execute_bg_rect_copy(self, cmd0, cmd1, dis):
         if dis:
+            from texture import commit_textures
+
+            commit_textures(dis.sTxt, dis.current_pos, [0])
+            dis.side_effects.append(
+                {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0]}
+            )
             dis.set_cmd("gSPBgRectCopy", {}, commented_out=True)
 
     def execute_obj_render_mode(self, cmd0, cmd1, dis):

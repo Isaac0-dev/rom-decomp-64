@@ -311,7 +311,7 @@ def parse_ctl(parsed_header, data, sample_bank, index, is_shindou):
     inst_base_addr = 4
     if len(data) < inst_base_addr + num_instruments * 4:
         raise ValueError(
-            f"CTL bank {index} truncated: need {inst_base_addr + num_instruments*4} bytes for inst table, have {len(data)}"
+            f"CTL bank {index} truncated: need {inst_base_addr + num_instruments * 4} bytes for inst table, have {len(data)}"
         )
     inst_addrs = []
     inst_list: List[Optional[int]] = []
@@ -755,7 +755,9 @@ def main(*Fargs):
             if index == 13 and ExtC:
                 break
             if offset + length > len(ctl_data):
-                debug_print(f"Skipping ctl bank {index}: entry 0x{offset:X}+0x{length:X} out of bounds")
+                debug_print(
+                    f"Skipping ctl bank {index}: entry 0x{offset:X}+0x{length:X} out of bounds"
+                )
                 continue
             if length < 16:
                 debug_print(f"Skipping ctl bank {index}: entry too short ({length})")

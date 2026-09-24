@@ -63,7 +63,9 @@ class BaseProcessor(ABC):
         start_off: int,
         end_off: int,
     ) -> None:
-        self.ctx.region_map.claim(phys_base + start_off, phys_base + end_off, kind, f"0x{segmented_addr:08X}")
+        self.ctx.region_map.claim(
+            phys_base + start_off, phys_base + end_off, kind, f"0x{segmented_addr:08X}"
+        )
 
     def indent(self) -> str:
         """Returns the current indentation string."""

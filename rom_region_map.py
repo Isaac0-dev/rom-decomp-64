@@ -105,8 +105,7 @@ class RomRegionMap:
             self.conflict_count += 1
             p = partial[0]
             debug_fail(
-                f"new {kind} claim (0x{start:06X}-0x{end:06X}) partial overlap: "
-                f"{p.describe()}."
+                f"new {kind} claim (0x{start:06X}-0x{end:06X}) partial overlap: {p.describe()}."
             )
             self._insert(start, end, kind, owner, conflicted=True)
 

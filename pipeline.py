@@ -370,14 +370,16 @@ class ExtractionPipeline:
                 scan_start = 0x400000
                 if scan_start >= len(rom_data):
                     scan_start = 0
+
+                # Fast C-level prefilter for 4-byte header prefix
+                # 00 01-05 00 0A-64 (rev 1-5, count 10-100), then full validation.
+                pat = re.compile(b"\x00[\x01-\x05]\x00[\x0a-\x64]")
                 alseq_candidates = []
-                for offset in range(scan_start, len(rom_data) - 12, 4):
-                    # Quick filter for general structure, will be validated later
-                    revision = struct.unpack(">H", rom_data[offset : offset + 2])[0]
-                    if revision < 1 or revision > 5:
+                for m in pat.finditer(rom_data, scan_start):
+                    offset = m.start()
+                    if offset % 4 != 0:
                         continue
-                    seq_count = struct.unpack(">H", rom_data[offset + 2 : offset + 4])[0]
-                    if not 10 <= seq_count <= 100:
+                    if offset + 12 > len(rom_data):
                         continue
                     if is_valid_alseq_header_bytes(rom_data, offset):
                         alseq_candidates.append(offset)
