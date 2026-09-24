@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from segment import (
     segment_from_addr,
     offset_from_segment_addr,
+    segmented_to_virtual,
     where_is_segment_loaded,
     get_segment,
 )
@@ -494,7 +495,11 @@ class CollisionProcessor(BaseProcessor):
         if self.ctx.db and db_key in self.ctx.db.collisions:
             return self.ctx.db.collisions[db_key]
 
-        offset = offset_from_segment_addr(segmented_addr)
+        offset = (
+            segmented_to_virtual(segmented_addr)
+            if seg_num == 0
+            else offset_from_segment_addr(segmented_addr)
+        )
         data = get_segment(seg_num)
         if data is None:
             debug_fail(

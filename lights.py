@@ -1,5 +1,5 @@
 from utils import debug_fail, debug_print, offset_from_segment_addr, segment_from_addr
-from segment import CustomBytesIO, get_segment, where_is_segment_loaded
+from segment import CustomBytesIO, get_segment, segmented_to_virtual, where_is_segment_loaded
 import struct
 from typing import Dict, Tuple, Any, List, Optional
 from dataclasses import dataclass
@@ -41,7 +41,10 @@ class LightProcessor(BaseProcessor):
             return None
 
         seg_num = segment_from_addr(segmented_addr)
-        offset = offset_from_segment_addr(segmented_addr)
+        if seg_num == 0:
+            offset = segmented_to_virtual(segmented_addr)
+        else:
+            offset = offset_from_segment_addr(segmented_addr)
         output = where_is_segment_loaded(seg_num)
         if output is None:
             debug_fail(

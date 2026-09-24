@@ -196,7 +196,9 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
         wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
         return
 
-    offset = offset_from_segment_addr(addr)
+    offset = (
+        segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
+    )
     segment_data = segment
 
     # Validate mapping if we have a recorded physical address
@@ -355,6 +357,9 @@ def _write_png_worker(
 
         tex_data = data_source[offset : offset + required_bytes]
         buffer = BytesIO()
+        if fmt not in image_handlers:
+            debug_print(f"Skipping texture {name}: unsupported fmt {fmt}")
+            return
         if fmt == ImageFormat.CI:
             if palette is None:
                 debug_print(f"Skipping CI texture {name}: no palette provided")
@@ -411,8 +416,19 @@ def write_texture(
                 if offset < len(data) and len(data) - offset >= required_bytes:
                     rec.segment_data = bytes(data[offset : offset + required_bytes])
                     break
+            if not rec.segment_data and seg_num == 0 and phys is not None and ctx.rom:
+                try:
+                    ctx.rom.seek(phys)
+                    rom_data = ctx.rom.read(required_bytes)
+                    if len(rom_data) == required_bytes:
+                        rec.segment_data = bytes(rom_data)
+                        debug_print(
+                            f"write_texture seg0 direct ROM fallback for {name} at phys 0x{phys:X}"
+                        )
+                except Exception as e:
+                    debug_print(f"write_texture seg0 fallback failed for {name}: {e}")
 
-    if rec.segment_data is None and phys is not None and ctx.rom:
+    if not rec.segment_data and phys is not None and ctx.rom:
         # Fallback to physical ROM reading
         try:
             ctx.rom.seek(phys)
@@ -492,7 +508,11 @@ def set_texture_image(
             addr=segmented_addr,
             phys=phys,
             seg_num=seg_num,
-            offset=offset_from_segment_addr(segmented_addr),
+            offset=(
+                segmented_to_virtual(segmented_addr)
+                if seg_num == 0
+                else offset_from_segment_addr(segmented_addr)
+            ),
             fmt=fmt,
             siz=siz,
             width=width,
@@ -536,7 +556,9 @@ def load_block(
         return
 
     seg_num = segment_from_addr(addr)
-    offset = offset_from_segment_addr(addr)
+    offset = (
+        segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
+    )
 
     # bits per pixel
     image_size_type_to_bpp = [4, 8, 16, 32]
@@ -585,7 +607,9 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
         return
 
     seg_num = segment_from_addr(addr)
-    offset = offset_from_segment_addr(addr)
+    offset = (
+        segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
+    )
 
     w = ((lrs - uls) >> 2) + 1
     h = ((lrt - ult) >> 2) + 1
@@ -644,12 +668,45 @@ def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
         w = tile_cfg.width if tile_cfg.width > 0 else source.width
         h = tile_cfg.height if tile_cfg.height > 0 else source.height
 
-        if w <= 0 or h <= 0:
-            debug_print(f"Skipping tile {tile_idx} because calculated w={w}, h={h}")
+        # Only hardware-valid fmt/siz can be interpreted correctly
+        if fmt not in (
+            ImageFormat.RGBA,
+            ImageFormat.YUV,
+            ImageFormat.CI,
+            ImageFormat.IA,
+            ImageFormat.I,
+        ):
+            debug_print(
+                f"Skipping tile {tile_idx} with invalid fmt {fmt} for source 0x{source.addr:08X}"
+            )
+            continue
+        if siz not in (
+            ImageSize.B4,
+            ImageSize.B8,
+            ImageSize.B16,
+            ImageSize.B32,
+        ):
+            debug_print(
+                f"Skipping tile {tile_idx} with invalid siz {siz} for source 0x{source.addr:08X}"
+            )
+            continue
+
+        # Unknown or absurd dimensions cannot be interpreted correctly either
+        if w <= 0 or h <= 0 or w > 1024 or h > 1024:
+            debug_print(
+                f"Skipping tile {tile_idx} because calculated w={w}, h={h} "
+                f"for source 0x{source.addr:08X}"
+            )
             continue
 
         image_size_type_to_bpp = [4, 8, 16, 32]
-        bpp = image_size_type_to_bpp[siz]
+        try:
+            bpp = image_size_type_to_bpp[siz]
+        except (IndexError, KeyError, TypeError):
+            debug_print(
+                f"Skipping tile {tile_idx} with undecodable siz {siz} for source 0x{source.addr:08X}"
+            )
+            continue
 
         phys = source.phys
         name = f"texture_{source.addr:08X}_{phys:08X}_seg{source.seg_num}"
@@ -889,12 +946,60 @@ class TextureProcessor(BaseProcessor):
         w = record.width
         h = record.height
         siz = record.siz
-        bpp = [4, 8, 16, 32][siz]
+
+        # Only hardware-valid fmt/siz/dimensions can be interpreted correctly
+        if fmt not in (
+            ImageFormat.RGBA,
+            ImageFormat.YUV,
+            ImageFormat.CI,
+            ImageFormat.IA,
+            ImageFormat.I,
+        ):
+            debug_print(f"Skipping texture {name} with invalid fmt {fmt} at serialize.")
+            return ""
+        if siz not in (
+            ImageSize.B4,
+            ImageSize.B8,
+            ImageSize.B16,
+            ImageSize.B32,
+        ):
+            debug_print(f"Skipping texture {name} with invalid siz {siz} at serialize.")
+            return ""
+        if w is None or h is None or w <= 0 or h <= 0 or w > 1024 or h > 1024:
+            debug_print(
+                f"Skipping texture {name} with invalid dimensions {w}x{h} at serialize."
+            )
+            return ""
+        try:
+            bpp = [4, 8, 16, 32][siz]
+        except (IndexError, KeyError, TypeError):
+            debug_print(f"Skipping texture {name} with undecodable siz {siz}.")
+            return ""
         palette = record.palette_data
 
         if fmt == ImageFormat.CI and palette is None:
             debug_print(f"WARNING: Skipping CI texture {name} at serialize: no palette.")
             return ""
+
+        # If we never snapshotted, try direct ROM read (only for seg0).
+        if not record.segment_data and record.seg_num == 0 and record.phys and ctx.rom:
+            required = (w * h * bpp + 7) // 8 if w and h else 0
+            if required > 0:
+                try:
+                    ctx.rom.seek(record.phys)
+                    data = ctx.rom.read(required)
+                    if len(data) == required:
+                        record.segment_data = bytes(data)
+                        debug_print(
+                            f"serialize seg0 ROM fallback for {name} at phys 0x{record.phys:X} {w}x{h}"
+                        )
+                    else:
+                        debug_print(
+                            f"serialize seg0 fallback short read for {name}: "
+                            f"got {len(data)}/{required}, skipping"
+                        )
+                except Exception as e:
+                    debug_print(f"serialize seg0 fallback failed for {name}: {e}")
 
         # Level-specific path prefix for DynOS
         path = ""
