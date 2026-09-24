@@ -697,6 +697,9 @@ def LOAD_MODEL_FROM_GEO(values):
 
     comment = ""
 
+    if geo_rec is None:
+        comment = "// "
+
     from model_ids import resolve_model_id
 
     model_param = resolve_model_id(model, ctx.get_cur_level()) or f"0x{model:02x}"

@@ -1,4 +1,5 @@
 from .gbi1 import GBI1
+from .base import MAX_VERTEX_INDEX
 from typing import Dict, cast
 from gbi_defines import (
     G_DL_PUSH,
@@ -93,6 +94,13 @@ class GBI2(GBI1):
         address = cmd1
 
         if dis:
+            if count == 0 or count >= MAX_VERTEX_INDEX or v0 < 0 or v0 >= MAX_VERTEX_INDEX:
+                dis.reject_cmd(
+                    "gsSPVertex",
+                    {"count": count, "v0": v0},
+                    f"count={count} v0={v0} outside plausible range",
+                )
+                return
             vertices_record = vertices.parse_vertices(
                 address, count, dis.sTxt, dis.context_prefix, self.parent_dl
             )
@@ -115,6 +123,13 @@ class GBI2(GBI1):
         flag = self._SHIFTR(cmd1, 24, 8)
 
         if dis:
+            if max(v0, v1, v2) >= MAX_VERTEX_INDEX:
+                dis.reject_cmd(
+                    "gsSP1Triangle",
+                    {"v0": v0, "v1": v1, "v2": v2},
+                    "vertex index rejected by max bound",
+                )
+                return
             from texture import commit_textures
 
             commit_textures(dis.sTxt, dis.current_pos, [0, 1])
@@ -143,11 +158,17 @@ class GBI2(GBI1):
 
         if dis:
             dl_record = dis.parse_dl(address)
+
+            dis.branch_taken = param != G_DL_PUSH  # mark a branch
+
+            if dl_record is None:
+                debug_print(f"Failed to parse display list at address {address}")
+                return
+
             if param == G_DL_PUSH:
                 dis.set_cmd("gsSPDisplayList", {"dl": dl_record})
             else:
                 dis.set_cmd("gsSPBranchList", {"dl": dl_record})
-                dis.branch_taken = True
 
     def execute_end_dl(self, cmd0, cmd1, dis):
         if dis:

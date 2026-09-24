@@ -24,6 +24,9 @@ from texture import (
 from context import LevelAreaContext
 from rom_database import CommandIR, RomDatabase
 
+# same as coop's max
+MAX_VERTEX_INDEX = 68
+
 
 class Microcode(ABC):
     def __init__(self):
@@ -133,6 +136,13 @@ class Microcode(ABC):
         siz = G_IM_SIZ_MAP.get(siz_val, str(siz_val))
 
         if dis:
+            if fmt_val > 4:
+                dis.reject_cmd(
+                    "gsDPSetTextureImage",
+                    {"fmt": fmt, "siz": siz, "width": width, "texture_record": None},
+                    f"fmt {fmt_val} outside hardware range 0-4",
+                )
+                return
             from segment import segmented_to_virtual
 
             phys_addr = segmented_to_virtual(texture_addr)
@@ -192,6 +202,13 @@ class Microcode(ABC):
         cms = get_flags(cms_val)
 
         if dis:
+            if fmt_val > 4:
+                dis.reject_cmd(
+                    "gsDPSetTile",
+                    {"fmt": fmt, "siz": siz, "tile": tile},
+                    f"fmt {fmt_val} outside hardware range 0-4",
+                )
+                return
             dis.side_effects.append(
                 {
                     "type": "set_tile",
@@ -231,6 +248,13 @@ class Microcode(ABC):
         tile = G_TX_MAP.get(tile_val, str(tile_val))
 
         if dis:
+            if uls > lrs:
+                dis.reject_cmd(
+                    "gsDPLoadBlock",
+                    {"tile": tile, "uls": uls, "ult": ult, "lrs": lrs, "dxt": dxt},
+                    f"empty block uls={uls} lrs={lrs}",
+                )
+                return
             dis.side_effects.append(
                 {
                     "type": "load_block",
@@ -347,6 +371,13 @@ class Microcode(ABC):
         lrt = self._SHIFTR(cmd1, 0, 12)
         tile_name = G_TX_MAP.get(tile, str(tile))
         if dis:
+            if uls > lrs or ult > lrt:
+                dis.reject_cmd(
+                    "gsDPSetTileSize",
+                    {"tile": tile_name, "uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt},
+                    f"empty rectangle uls={uls} ult={ult} lrs={lrs} lrt={lrt}",
+                )
+                return
             dis.side_effects.append(
                 {
                     "type": "set_tile_size",
@@ -372,6 +403,13 @@ class Microcode(ABC):
         lrt = self._SHIFTR(cmd1, 0, 12)
         tile_name = G_TX_MAP.get(tile_val, str(tile_val))
         if dis:
+            if uls > lrs or ult > lrt:
+                dis.reject_cmd(
+                    "gsDPLoadTile",
+                    {"tile": tile_name, "uls": uls, "ult": ult, "lrs": lrs, "lrt": lrt},
+                    f"empty rectangle uls={uls} ult={ult} lrs={lrs} lrt={lrt}",
+                )
+                return
             dis.side_effects.append(
                 {
                     "type": "load_tile",
@@ -441,7 +479,11 @@ class Microcode(ABC):
         width = self._SHIFTR(cmd0, 0, 12) + 1
         img = cmd1
         if dis:
-            dis.set_cmd("gsDPSetColorImage", {"fmt": fmt, "siz": siz, "width": width, "image": img})
+            dis.set_cmd(
+                "gsDPSetColorImage",
+                {"fmt": fmt, "siz": siz, "width": width, "image": img},
+                commented_out=True,  # coop doesn't support G_SETCIMG
+            )
 
     def execute_dp_set_depth_image(self, cmd0, cmd1, dis):
         if dis:

@@ -1,4 +1,4 @@
-from .base import Microcode
+from .base import MAX_VERTEX_INDEX, Microcode
 from gbi_defines import (
     G_DL_PUSH,
     G_GEOMETRYMODE_FLAGS_GBI1,
@@ -204,6 +204,14 @@ class GBI1(Microcode):
         address = cmd1
 
         if dis:
+            # n == 0 loads nothing
+            if n == 0 or v0 >= MAX_VERTEX_INDEX:
+                dis.reject_cmd(
+                    "gsSPVertex",
+                    {"count": n, "v0": v0},
+                    f"count={n} v0={v0} outside plausible range",
+                )
+                return
             vertices_record = vertices.parse_vertices(
                 address, n, dis.sTxt, dis.context_prefix, self.parent_dl
             )
@@ -256,6 +264,13 @@ class GBI1(Microcode):
         v12 = self._SHIFTR(cmd1, 0, 8) // self.vertex_stride
 
         if dis:
+            if max(v00, v01, v02, v10, v11, v12) >= MAX_VERTEX_INDEX:
+                dis.reject_cmd(
+                    "gsSP2Triangles",
+                    {"v00": v00, "v01": v01, "v02": v02, "v10": v10, "v11": v11, "v12": v12},
+                    "vertex index rejected by bound",
+                )
+                return
             commit_textures(dis.sTxt, dis.current_pos, [0, 1])
             dis.side_effects.append(
                 {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}
@@ -441,6 +456,13 @@ class GBI1(Microcode):
         flag = self._SHIFTR(cmd1, 24, 8)
 
         if dis:
+            if max(v0, v1, v2) >= MAX_VERTEX_INDEX:
+                dis.reject_cmd(
+                    "gsSP1Triangle",
+                    {"v0": v0, "v1": v1, "v2": v2},
+                    "vertex index rejected by max bound",
+                )
+                return
             commit_textures(dis.sTxt, dis.current_pos, [0, 1])
             dis.side_effects.append(
                 {"type": "commit_textures", "pos": dis.current_pos, "tiles": [0, 1]}

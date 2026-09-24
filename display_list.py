@@ -21,6 +21,8 @@ current_microcode: Any = None
 # Stack for isolating geometry mode when fresh DLs are processed
 geometry_mode_stack: List[int] = []
 
+DL_TERMINATORS = ("gsSPBranchList", "gsSPEndDisplayList")
+
 
 @dataclass
 class GfxCommand:
@@ -38,6 +40,7 @@ class Disassembler:
         self.side_effects: List[Dict[str, Any]] = []
         self.end_dl = False
         self.branch_taken = False
+        self.corrupt = False
         self.current_pos = 0
         self.current_w0 = 0
         self.current_w1 = 0
@@ -66,6 +69,11 @@ class Disassembler:
         if record:
             self.side_effects.append({"type": "display_list", "name": record.name})
         return record
+
+    def reject_cmd(self, name: str, params: Dict[str, Any], reason: str) -> None:
+        debug_print(f"Rejecting corrupt {name} at DL offset 0x{self.current_pos:X}: {reason}")
+        self.set_cmd(name, params, commented_out=True)
+        self.corrupt = True
 
 
 def push_geometry_mode() -> None:
@@ -158,12 +166,32 @@ def parse_display_list_from_data(
             if (
                 dis.end_dl
                 or dis.branch_taken
+                or dis.corrupt
                 or (hasattr(handler, "__name__") and handler.__name__ == "execute_unknown")
             ):
                 break
         return dis.commands, dis.side_effects, current_microcode.version_str
     finally:
         current_microcode = old
+
+
+def _make_end_dl(ucode_name: str, address: int) -> CommandIR:
+    end_opcode = 0xDF if ucode_name == "F3DEX2" else 0xB8
+    params = {"end": True} if ucode_name == "F3DEX2" else {}
+    w0 = end_opcode << 24
+    return CommandIR(
+        opcode=end_opcode,
+        params=[GfxCommand(w0, 0, params)],
+        address=address,
+        raw_data=w0.to_bytes(4, "big") + b"\x00" * 4,
+        name="gsSPEndDisplayList",
+    )
+
+
+def _ensure_dl_terminated(commands: List[CommandIR], ucode_name: str, address: int) -> None:
+    if commands and commands[-1].name not in DL_TERMINATORS:
+        debug_print(f"Appending gsSPEndDisplayList to unterminated display list at 0x{address:08X}")
+        commands.append(_make_end_dl(ucode_name, address))
 
 
 # --- DisplayListProcessor ---
@@ -228,6 +256,15 @@ class DisplayListProcessor(BaseProcessor):
             force_microcode=forced,
         )
 
+        if len(commands) == 0:
+            debug_print(
+                f"Skipping empty display list at 0x{segmented_addr:08X} (no commands parsed)"
+            )
+            return None
+
+        # Must terminate at the end of all DLs
+        _ensure_dl_terminated(commands, ucode_name, segmented_addr)
+
         self.claim_parsed_region(
             "Display List", segmented_addr, start, offset, offset + 8 * len(commands)
         )
@@ -251,11 +288,15 @@ class DisplayListProcessor(BaseProcessor):
 
         # Use the structured CommandIR for serialization if available
         if record.commands:
+            commands = list(record.commands)
+            _ensure_dl_terminated(
+                commands, record.microcode, record.seg_addr
+            )  # Must terminate at the end of all DLs
             output_str = serialize_gfx_layout(
-                record.name, record.commands, self.ctx.db, record.location, record.microcode
+                record.name, commands, self.ctx.db, record.location, record.microcode
             )
         else:
-            output_str = record.script_text
+            return ""
 
         if self.ctx.txt and output_str:
             self.ctx.txt.write(self.ctx, "dl", record.name, output_str)

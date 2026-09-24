@@ -320,6 +320,35 @@ def structural_hash_geo_fuzzy(commands_data, script_start=0):
 _geo_segment_stack: List[int] = []
 
 
+def _is_geo_terminated(commands) -> bool:
+    if not commands:
+        return False
+    last = commands[-1]
+    if last.name in ("GEO_END", "GEO_RETURN"):
+        return True
+    return last.name == "GEO_BRANCH" and len(last.params) >= 1 and last.params[0] == 0
+
+
+def _append_geo_end(commands, address: int) -> None:
+    indent = commands[-1].indent if commands else 0
+    debug_print(f"Appending GEO_END to unterminated geo layout at 0x{address:08X}")
+    commands.append(
+        CommandIR(
+            opcode=0x01,
+            params=[],
+            address=address,
+            raw_data=b"\x01\x00\x00\x00",
+            indent=indent,
+            name="GEO_END",
+        )
+    )
+
+
+def _ensure_geo_terminated(commands, address: int) -> None:
+    if not _is_geo_terminated(commands):
+        _append_geo_end(commands, address)
+
+
 class GeoProcessor(BaseProcessor):
     def __init__(self, context):
         super().__init__(context)
@@ -408,6 +437,13 @@ class GeoProcessor(BaseProcessor):
 
         self.claim_parsed_region("Geo Layout", segmented_addr, start, offset, rom.tell())
 
+        if len(commands_ir) == 0:
+            debug_print(f"Skipping empty geo layout at 0x{segmented_addr:08X} (no commands parsed)")
+            return None
+
+        # Must terminate at the end of all geo layouts
+        _ensure_geo_terminated(commands_ir, segmented_addr)
+
         h = structural_hash_geo(commands_data, script_start=segmented_addr)
 
         # Identity logic
@@ -429,8 +465,16 @@ class GeoProcessor(BaseProcessor):
     def serialize(self, record: GeoRecord) -> str:
         from utils import script_str
 
+        if not record.commands:
+            return ""
+
+        commands = list(record.commands)
+        _ensure_geo_terminated(
+            commands, record.seg_addr
+        )  # Must terminate at the end of all geo layouts
+
         output = f"const GeoLayout {record.name}[] = {{\n"
-        for ir in record.commands:
+        for ir in commands:
             prefix = "    " * (ir.indent + 1)
 
             # Hex dump of the command bytes
