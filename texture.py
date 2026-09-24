@@ -196,9 +196,7 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
         wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
         return
 
-    offset = (
-        segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
-    )
+    offset = segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
     segment_data = segment
 
     # Validate mapping if we have a recorded physical address
@@ -556,9 +554,7 @@ def load_block(
         return
 
     seg_num = segment_from_addr(addr)
-    offset = (
-        segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
-    )
+    offset = segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
 
     # bits per pixel
     image_size_type_to_bpp = [4, 8, 16, 32]
@@ -607,9 +603,7 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
         return
 
     seg_num = segment_from_addr(addr)
-    offset = (
-        segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
-    )
+    offset = segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
 
     w = ((lrs - uls) >> 2) + 1
     h = ((lrt - ult) >> 2) + 1
@@ -966,9 +960,7 @@ class TextureProcessor(BaseProcessor):
             debug_print(f"Skipping texture {name} with invalid siz {siz} at serialize.")
             return ""
         if w is None or h is None or w <= 0 or h <= 0 or w > 1024 or h > 1024:
-            debug_print(
-                f"Skipping texture {name} with invalid dimensions {w}x{h} at serialize."
-            )
+            debug_print(f"Skipping texture {name} with invalid dimensions {w}x{h} at serialize.")
             return ""
         try:
             bpp = [4, 8, 16, 32][siz]
