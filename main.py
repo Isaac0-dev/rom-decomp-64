@@ -11,7 +11,7 @@ def main():
     files_in_current_directory = [
         item
         for item in os.listdir(".")
-        if os.path.isfile(os.path.join(".", item)) and item.endswith(".z64")
+        if os.path.isfile(os.path.join(".", item)) and item.lower().endswith((".z64", ".bps"))
     ]
     results = []
     for f in files_in_current_directory:

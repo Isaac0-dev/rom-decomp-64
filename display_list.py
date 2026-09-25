@@ -12,8 +12,9 @@ from typing import Any, Dict, List, Optional
 import struct
 from microcode import create_microcode
 from base_processor import BaseProcessor
-from rom_database import DisplayListRecord, CommandIR
+from rom_database import DisplayListRecord, CommandIR, RomDatabase
 from context import ctx, provenance
+from context import LevelAreaContext
 
 current_geometry_mode: int = 0x22205
 current_microcode: Any = None
@@ -194,6 +195,22 @@ def _ensure_dl_terminated(commands: List[CommandIR], ucode_name: str, address: i
         commands.append(_make_end_dl(ucode_name, address))
 
 
+def serialize_gfx_layout(
+    dl_name: str,
+    commands: List[CommandIR],
+    db: RomDatabase,
+    location: LevelAreaContext,
+    microcode_name: str = "F3D",
+) -> str:
+    """Serialize a full DisplayListRecord into a C file string."""
+    ucode = create_microcode(microcode_name)
+    lines = [f"const Gfx {dl_name}[] = {{"]
+    for cmd in commands:
+        lines.append(ucode.serialize_command(cmd, db, location))
+    lines.append("};")
+    return "\n".join(lines)
+
+
 # --- DisplayListProcessor ---
 
 
@@ -284,7 +301,6 @@ class DisplayListProcessor(BaseProcessor):
         return record
 
     def serialize(self, record: DisplayListRecord) -> str:
-        from serialization_helpers import serialize_gfx_layout
 
         # Use the structured CommandIR for serialization if available
         if record.commands:

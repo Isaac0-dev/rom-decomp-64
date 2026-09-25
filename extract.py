@@ -57,6 +57,7 @@ STATUS_PREFIX = "STATUS|"
 _status_enabled = False
 args = None
 _current_filename = None
+last_output_dir = None
 
 DOWNLOAD_FOLDER = "downloads"
 
@@ -90,14 +91,19 @@ def parse_args(argv=None):
         help="Whether to extract .aiff files of audio from the ROM.",
     )
     p.add_argument("-v", "--verbose", action="count", default=0, help="Increase output verbosity")
-    p.add_argument("filename", nargs="?", default="baserom.us.z64")
+    p.add_argument(
+        "filename",
+        nargs="?",
+        default="baserom.us.z64",
+        help="ROM (.z64/.n64/.v64), BPS patch, ZIP, or romhacking.com URL",
+    )
     return p.parse_args(argv)
 
 
 def main(filename_override=None, output_status_override=None, called_by_main_override=None):
     from pipeline import ExtractionPipeline
 
-    global _status_enabled, _current_filename, args
+    global _status_enabled, _current_filename, args, last_output_dir
     ctx.reached_end = False
 
     if args:
@@ -105,10 +111,11 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
 
     filename = filename_override or (args.filename if args else "baserom.us.z64")
 
-    if filename.startswith("http://") or filename.startswith("https://"):
-        patched_rom = download_and_patch(filename)
-        assert patched_rom is not None, "Failed to download and patch ROM"
-        filename = patched_rom
+    resolved = resolve_rom_input(filename)
+    if resolved is None:
+        debug_fail(f"Failed to resolve ROM / patch input: '{filename}'")
+        return 1
+    filename = resolved
 
     called_by_main = (
         called_by_main_override
@@ -133,6 +140,7 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
     )
 
     exit_code = pipeline.run()
+    last_output_dir = pipeline.output_dir
 
     """ vvvv code for development purposes vvvv """
     from n64_host import IS_BROWSER
@@ -162,6 +170,128 @@ def main(filename_override=None, output_status_override=None, called_by_main_ove
         sys.exit(0 if exit_code == 100 else 1)
 
     return exit_code
+
+
+def apply_bps_to_vanilla(patch_path, output_rom):
+    """Apply a local BPS patch onto the vanilla SM64 US ROM.
+
+    Reuses ``output_rom`` when it already matches the patch's target CRC32.
+    """
+    import binascii
+    import utils as utils_mod
+
+    try:
+        with open(patch_path, "rb") as f:
+            patcher = bps.BPSPatch(f.read())
+    except Exception as e:
+        debug_fail(f"Error: Invalid BPS patch '{patch_path}': {e}")
+        return None
+
+    if os.path.isfile(output_rom):
+        try:
+            with open(output_rom, "rb") as f:
+                existing = f.read()
+            existing_crc = binascii.crc32(existing) & 0xFFFFFFFF
+            if existing_crc == patcher.target_checksum:
+                print(f"Reusing existing patched ROM: {output_rom}")
+                return output_rom
+        except OSError:
+            pass
+
+    # get_vanilla_sm64_rom() caches the ROM bytes and sets
+    # utils.vanilla_rom_path as a side effect; only the path is needed below.
+    if get_vanilla_sm64_rom() is None:
+        debug_fail("Error: Could not find a vanilla SM64 (US) base ROM for patching.")
+        return None
+
+    base_rom_path = utils_mod.vanilla_rom_path
+    if not base_rom_path:
+        debug_fail("Error: vanilla ROM path unknown after locating base ROM.")
+        return None
+    print(f"Patching {base_rom_path} with {patch_path} -> {output_rom}")
+    try:
+        bps.apply_patch(patch_path, base_rom_path, output_rom)
+        print(f"Successfully patched ROM: {output_rom}")
+        return output_rom
+    except Exception as e:
+        debug_fail(f"Error applying patch: {e}")
+        return None
+
+
+def _safe_extract_zip(zip_path, dest_dir):
+    """Extract a zip with ZipSlip guard. Returns namelist, or None on failure."""
+    try:
+        os.makedirs(dest_dir, exist_ok=True)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            names = zip_ref.namelist()
+            base = os.path.realpath(dest_dir)
+            for name in names:
+                # Directory entries have no file content to guard.
+                if name.endswith("/"):
+                    continue
+                target = os.path.realpath(os.path.join(base, name))
+                if target != base and not target.startswith(base + os.sep):
+                    debug_fail(f"Error: unsafe zip entry '{name}' in '{zip_path}'")
+                    return None
+                zip_ref.extract(name, dest_dir)
+            return names
+    except (zipfile.BadZipFile, OSError) as e:
+        debug_fail(f"Error: could not extract zip '{zip_path}': {e}")
+        return None
+
+
+def _pick_zip_contents(dest_dir, names):
+    """Pick (patch_path, rom_path) deterministically; first sorted hit wins."""
+    bps_hits = sorted(n for n in names if n.lower().endswith(".bps") and not n.endswith("/"))
+    rom_hits = sorted(
+        n for n in names if n.lower().endswith((".z64", ".n64", ".v64")) and not n.endswith("/")
+    )
+    if len(bps_hits) > 1:
+        debug_print(f"Zip has {len(bps_hits)} BPS files; using '{bps_hits[0]}'")
+    if len(rom_hits) > 1:
+        debug_print(f"Zip has {len(rom_hits)} ROMs; using '{rom_hits[0]}'")
+    patch_path = os.path.join(dest_dir, bps_hits[0]) if bps_hits else None
+    final_rom_path = os.path.join(dest_dir, rom_hits[0]) if rom_hits else None
+    return patch_path, final_rom_path
+
+
+def resolve_local_zip(zip_path):
+    """Extract a local zip and return a ROM path, applying a BPS if needed."""
+    if not os.path.exists(DOWNLOAD_FOLDER):
+        os.makedirs(DOWNLOAD_FOLDER)
+
+    dest_dir = os.path.join(DOWNLOAD_FOLDER, os.path.splitext(os.path.basename(zip_path))[0])
+
+    debug_print(f"Extracting {zip_path}...")
+    names = _safe_extract_zip(zip_path, dest_dir)
+    if names is None:
+        return None
+    patch_path, final_rom_path = _pick_zip_contents(dest_dir, names)
+
+    if patch_path and not final_rom_path:
+        output_rom = os.path.splitext(patch_path)[0] + ".z64"
+        return apply_bps_to_vanilla(patch_path, output_rom)
+
+    if final_rom_path is None:
+        debug_fail(f"Error: zip '{zip_path}' contains no ROM or BPS file.")
+    return final_rom_path
+
+
+def resolve_rom_input(filename):
+    """Turn a URL, BPS, ZIP, or ROM path into a usable ROM file path."""
+    if filename.startswith("http://") or filename.startswith("https://"):
+        return download_and_patch(filename)
+
+    if not os.path.isfile(filename):
+        return filename
+
+    lower = filename.lower()
+    if lower.endswith(".zip"):
+        return resolve_local_zip(filename)
+    if lower.endswith(".bps"):
+        output_rom = os.path.splitext(filename)[0] + ".z64"
+        return apply_bps_to_vanilla(filename, output_rom)
+    return filename
 
 
 def download_and_patch(url):
@@ -279,34 +409,18 @@ def download_and_patch(url):
 
     if dl_path.endswith(".zip"):
         debug_print(f"Extracting {dl_path}...")
-        with zipfile.ZipFile(dl_path, "r") as zip_ref:
-            zip_ref.extractall(DOWNLOAD_FOLDER)
-            for name in zip_ref.namelist():
-                if name.lower().endswith(".bps"):
-                    patch_path = os.path.join(DOWNLOAD_FOLDER, name)
-                elif name.lower().endswith((".z64", ".n64", ".v64")):
-                    final_rom_path = os.path.join(DOWNLOAD_FOLDER, name)
+        names = _safe_extract_zip(dl_path, DOWNLOAD_FOLDER)
+        if names is None:
+            return None
+        patch_path, final_rom_path = _pick_zip_contents(DOWNLOAD_FOLDER, names)
+        if patch_path is None and final_rom_path is None:
+            debug_fail(f"Error: zip '{dl_path}' contains no ROM or BPS file.")
+            return None
     else:
         patch_path = dl_path
 
     if patch_path and not final_rom_path:
-        vanilla_data = get_vanilla_sm64_rom()
-        if vanilla_data is None:
-            debug_fail("Error: Could not find a vanilla SM64 (US) base ROM for patching.")
-            return None
-
-        from utils import vanilla_rom_path as base_rom_path
-
-        debug_print(f"Patching {base_rom_path} with {patch_path} -> {output_rom}")
-
-        try:
-            assert base_rom_path is not None
-            bps.apply_patch(patch_path, base_rom_path, output_rom)
-            final_rom_path = output_rom
-            debug_print(f"Successfully patched ROM: {output_rom}")
-        except Exception as e:
-            debug_fail(f"Error applying patch: {e}")
-            return None
+        final_rom_path = apply_bps_to_vanilla(patch_path, output_rom)
 
     return final_rom_path
 

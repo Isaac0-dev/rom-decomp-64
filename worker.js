@@ -34,7 +34,7 @@ const pythonFiles = [
     'rooms.py', 'scroll_targets.py', 'trajectory.py', 'vertices.py',
     'lights.py', 'constants.py', 'byteio.py', 'binary_to_png.py',
     'gbi_defines.py', 'db_passes.py', 'deferred_output.py',
-    'optimization_passes.py', 'output_manager.py', 'serialization_helpers.py',
+    'optimization_passes.py', 'output_manager.py',
     'vanilla_matcher.py', 'dynos_builtins.py', 'address_map.py',
     'address_map_typed.py', 'script_definitions.py', 'n64_host.py', 'bps.py',
     'base_processor.py', 'lua_modules.py', 'sm64.us.map', 'gen_anon_hashes.py',

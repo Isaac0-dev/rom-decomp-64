@@ -123,7 +123,7 @@ class ExtractionContext:
 
     found_mops: Set[str] = field(default_factory=set)
 
-    reached_end: bool = False
+    reached_end: bool = True  # default to true so that early exit doesn't trigger a warning
 
     _pending_record: Any = None
 
