@@ -1,11 +1,11 @@
 import struct
 import hashlib
 from typing import Any, Dict, List, Optional, Set, Tuple
+import segment
 from segment import (
     get_segment,
     segment_from_addr,
     offset_from_segment_addr,
-    sRom,
 )
 from utils import debug_print
 from context import ctx
@@ -16,7 +16,7 @@ _parsed_trajectory_addresses: Set[int] = set()
 trajectory_string: str = ""
 
 VANILLA_TRAJECTORIES: List[Tuple[int, str, str, int]] = [
-    # 0: segmented address
+    # 0: segmented address, or physical ROM offset for main-segment trajectories
     # 1: decomp name
     # 2: coop hardcoded field name
     # 3: editor index
@@ -33,6 +33,9 @@ VANILLA_TRAJECTORIES: List[Tuple[int, str, str, int]] = [
     (0x070116A0, "bob_seg7_trajectory_koopa", "KoopaBobTrajectory", 0),
     (0x07011530, "bob_seg7_metal_ball_path0", "BowlingBallBobTrajectory", 13),
     (0x070115C4, "bob_seg7_metal_ball_path1", "BowlingBallBob2Trajectory", 15),
+    (0x070170A0, "ttm_seg7_trajectory_070170A0", "BowlingBallTtmTrajectory", 14),
+    (0xED6C4, "sThiHugeMetalBallTraj", "BowlingBallThiLargeTrajectory", 16),
+    (0xED718, "sThiTinyMetalBallTraj", "BowlingBallThiSmallTrajectory", 17),
     (0x0700E258, "thi_seg7_trajectory_koopa", "KoopaThiTrajectory", 1),
     (0x07023604, "ccm_seg7_trajectory_penguin_race", "RacingPenguinTrajectory", 2),
     (0x0700D20C, "jrb_seg7_trajectory_unagi_1", "UnagiTrajectory", -1),
@@ -47,7 +50,6 @@ VANILLA_TRAJECTORIES: List[Tuple[int, str, str, int]] = [
     (0x07079004, "inside_castle_seg7_trajectory_mips_7", "Mips8Trajectory", -1),
     (0x07079020, "inside_castle_seg7_trajectory_mips_8", "Mips9Trajectory", -1),
     (0x07079044, "inside_castle_seg7_trajectory_mips_9", "Mips10Trajectory", -1),
-    (0x070170A0, "ttm_seg7_trajectory_070170A0", "BowlingBallTtmTrajectory", 14),
 ]
 
 VANILLA_TRAJECTORY_NAMES: Dict[int, str] = {entry[0]: entry[1] for entry in VANILLA_TRAJECTORIES}
@@ -205,10 +207,30 @@ def scan_for_trajectories(sTxt: Any) -> List[int]:
     found = []
 
     for addr in VANILLA_TRAJECTORY_NAMES:
+        if addr == -1:
+            continue
         seg_num = segment_from_addr(addr)
+        if seg_num == 0:
+            if segment.sRom is None:
+                continue
+            if addr in _parsed_trajectory_addresses:
+                continue
+            pos = segment.sRom.tell()
+            segment.sRom.seek(0)
+            rom_data = segment.sRom.read()
+            segment.sRom.seek(pos)
+            if addr + 8 > len(rom_data):
+                continue
+            _parsed_trajectory_addresses.add(addr)
+            nm = VANILLA_TRAJECTORY_NAMES[addr]
+            res = parse_trajectory(addr, sTxt, nm, raw_data=rom_data[addr:])
+            if res:
+                found.append(addr)
+                debug_print(f"Found vanilla trajectory: {nm} at {addr:08X}")
+            continue
         data = get_segment(seg_num)
         if not data:
-            return []
+            continue
         length = len(data)
 
         if addr in _parsed_trajectory_addresses:
@@ -227,14 +249,14 @@ def scan_for_trajectories(sTxt: Any) -> List[int]:
 
 
 def scan_sm64_editor_trajectories(sTxt: Any) -> List[int]:
-    if sRom is None:
+    if segment.sRom is None:
         debug_print("scan_sm64_editor_trajectories: sRom not loaded")
         return []
 
-    pos = sRom.tell()
-    sRom.seek(0)
-    data = sRom.read()
-    sRom.seek(pos)
+    pos = segment.sRom.tell()
+    segment.sRom.seek(0)
+    data = segment.sRom.read()
+    segment.sRom.seek(pos)
 
     rom_len = len(data)
     editor_traj_base = 0x01205000
@@ -252,7 +274,7 @@ def scan_sm64_editor_trajectories(sTxt: Any) -> List[int]:
             _parsed_trajectory_addresses.add(offset)
             nm = f"sm64_editor_trajectory_{idx:02d}"
             traj_info = VANILLA_TRAJECTORY_FROM_EDITOR_IDX.get(idx)
-            assert traj_info is not None
+            assert traj_info is not None, f"Missing trajectory info for editor index {idx}"
             nm = traj_info[1]
             override_name = traj_info[2]
             res = parse_trajectory(0, sTxt, nm, raw_data=data[offset:], override_name=override_name)
