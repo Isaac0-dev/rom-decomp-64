@@ -749,6 +749,21 @@ def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
             )
             continue
 
+        # Render dimensions come from SetTileSize and can exceed what actually got
+        # loaded into TMEM when the level tiles a small texture across a
+        # larger rect. Use the loaded dimensions instead.
+        if (
+            source.width > 0
+            and source.height > 0
+            and w * h > source.width * source.height
+        ):
+            debug_print(
+                f"Clamping tile {tile_idx} dims {w}x{h} to loaded "
+                f"{source.width}x{source.height} for 0x{source.addr:08X}"
+            )
+            w = source.width
+            h = source.height
+
         phys = source.phys
         name = f"texture_{source.addr:08X}_{phys:08X}_seg{source.seg_num}"
         if source.context_prefix:
