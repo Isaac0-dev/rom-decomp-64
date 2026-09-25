@@ -549,6 +549,7 @@ class RomDatabase:
     global_segs: Dict[int, GlobalSegRecord] = field(default_factory=dict)
     macros: Dict[Tuple[int, int], MacroRecord] = field(default_factory=dict)
     skyboxes: Dict[str, SkyboxRecord] = field(default_factory=dict)
+    record_homes: Dict[str, str] = field(default_factory=dict)
 
     def get_or_create_level(self, level_name: str, script_addr: int = 0) -> LevelRecord:
         if level_name not in self.levels:

@@ -14,14 +14,21 @@ from typing import Dict, List, Optional, Set, Tuple
 from rom_database import (
     RomDatabase,
     BehaviorRecord,
+    CollisionRecord,
+    DisplayListRecord,
     GeoRecord,
     LevelRecord,
+    LightRecord,
+    MacroRecord,
     ObjectRecord,
+    RoomsRecord,
+    TextureRecord,
+    VertexRecord,
 )
 from behavior_hashes import KNOWN_BEHAVIOR_HASHES
 from model_ids import MODEL_ID_BY_VALUE, _MODEL_ID_BY_LEVEL
 from data.expected_pairings import BEHAVIOR_TO_MODELS, MODEL_TO_BEHAVIORS
-from utils import debug_print
+from utils import debug_print, level_name_to_int_lookup
 from context import ctx
 
 BEHAVIOR_ADDR_OVERRIDES = {
@@ -586,6 +593,174 @@ class TextureContextPass(DatabaseAnalysisPass):
 
 
 # ---------------------------------------------------------------------------
+# Pass: Misc Visibility Relocation
+# ---------------------------------------------------------------------------
+
+
+class MiscVisibilityPass(DatabaseAnalysisPass):
+    """
+    Move definitions of data out of the misc folder if something references it.
+    """
+
+    name = "misc_visibility"
+
+    # Record types found as parameters inside other records' commands.
+    _REF_TYPES = (
+        VertexRecord,
+        LightRecord,
+        TextureRecord,
+        DisplayListRecord,
+        GeoRecord,
+        LevelRecord,
+        CollisionRecord,
+        RoomsRecord,
+        MacroRecord,
+    )
+
+    def run(self, db: RomDatabase) -> None:
+        debug_print("[MiscVisibility] Starting...")
+        levels = sorted(level_name_to_int_lookup)
+
+        def home_of(name) -> Optional[str]:
+            if not name:
+                return None
+            for lv in levels:
+                if name.startswith(lv + "_") or name == lv or f"_{lv}_" in name:
+                    return lv
+            return None
+
+        def eff_home(name) -> Optional[str]:
+            if not name:
+                return None
+            return db.record_homes.get(name, home_of(name))
+
+        refd_by: Dict[str, Set[str]] = {}
+
+        def scan(value, referrer: str) -> None:
+            if value is None or isinstance(value, (str, int, float, bool)):
+                return
+            if isinstance(value, self._REF_TYPES):
+                refd_by.setdefault(value.name, set()).add(referrer)
+                return
+            if isinstance(value, dict):
+                for v in value.values():
+                    scan(v, referrer)
+                return
+            if isinstance(value, (list, tuple)):
+                for v in value:
+                    scan(v, referrer)
+                return
+            params = getattr(value, "params", None)
+            if isinstance(params, dict):
+                scan(params, referrer)
+            elif isinstance(params, (list, tuple)):
+                scan(params, referrer)
+
+        for dl_rec in db.display_lists.values():
+            for cmd in dl_rec.commands or []:
+                scan(cmd, dl_rec.name)
+        for geo_rec in db.geos.values():
+            for cmd in geo_rec.commands or []:
+                scan(cmd, geo_rec.name)
+        for script_rec in db.level_scripts.values():
+            for cmd in script_rec.commands or []:
+                scan(cmd, script_rec.name)
+
+        candidates = (
+            list(db.vertices.values())
+            + list(db.lights.values())
+            + [t for t in db.textures.values() if t.seg_num != 2]
+            + list(db.display_lists.values())
+            + list(db.geos.values())
+            + list(db.level_scripts.values())
+            + list(db.collisions.values())
+            + list(db.rooms.values())
+            + list(db.macros.values())
+        )
+        moved = 0
+        # Propagate to a fixpoint: relocating a referrer can make its own
+        # dependencies eligible (e.g. vertex <- misc DL <- pss DL).
+        changed = True
+        while changed:
+            changed = False
+            for rec in candidates:
+                name = rec.name
+                if not name or eff_home(name) is not None:
+                    continue
+                outside = sorted(
+                    {h for h in (eff_home(r) for r in refd_by.get(name, ())) if h is not None}
+                )
+                if not outside:
+                    continue
+                db.record_homes[name] = outside[0]
+                moved += 1
+                changed = True
+                debug_print(f"  [MiscVisibility] {name} referenced from {outside} -> {outside[0]}")
+
+        debug_print(f"[MiscVisibility] Done. Relocated {moved} definition(s).")
+
+
+# ---------------------------------------------------------------------------
+# Pass: Texture Deduplication
+# ---------------------------------------------------------------------------
+
+
+class TextureDedupPass(DatabaseAnalysisPass):
+    """
+    Merge exactly the same texture records that were created under different names.
+    """
+
+    name = "texture_dedup"
+
+    def run(self, db: RomDatabase) -> None:
+        debug_print("[TextureDedup] Starting...")
+        groups: Dict[Tuple[int, int, int], List] = {}
+        for rec in db.textures.values():
+            groups.setdefault((rec.seg_num, rec.addr, rec.phys), []).append(rec)
+
+        def dims_valid(rec) -> bool:
+            return (
+                rec.width is not None
+                and rec.height is not None
+                and 0 < rec.width <= 1024
+                and 0 < rec.height <= 1024
+                and rec.fmt in (0, 1, 2, 3, 4)
+                and rec.siz in (0, 1, 2, 3)
+            )
+
+        merged = 0
+        for key, recs in groups.items():
+            if len(recs) < 2:
+                continue
+            donors = [r for r in recs if r.segment_data and dims_valid(r)]
+            if not donors:
+                continue
+            donor = donors[0]
+            for rec in recs:
+                if rec is donor:
+                    continue
+                changed = False
+                if not rec.segment_data:
+                    rec.segment_data = donor.segment_data
+                    changed = True
+                if rec.palette_data is None and donor.palette_data is not None:
+                    rec.palette_data = donor.palette_data
+                    changed = True
+                if not dims_valid(rec):
+                    rec.width = donor.width
+                    rec.height = donor.height
+                    rec.fmt = donor.fmt
+                    rec.siz = donor.siz
+                    changed = True
+                if changed:
+                    moved_note = f"  [TextureDedup] {rec.name} <- data from {donor.name}"
+                    debug_print(moved_note)
+                    merged += 1
+
+        debug_print(f"[TextureDedup] Done. Merged {merged} record(s).")
+
+
+# ---------------------------------------------------------------------------
 # Pass 3: Scrolling Texture Conversion
 # ---------------------------------------------------------------------------
 
@@ -667,6 +842,8 @@ class ScrollingTexturePass(DatabaseAnalysisPass):
 ALL_ANALYSIS_PASSES: List[DatabaseAnalysisPass] = [
     ObjectCorrelationPass(),
     TextureContextPass(),
+    MiscVisibilityPass(),
+    TextureDedupPass(),
     ScrollingTexturePass(),
 ]
 

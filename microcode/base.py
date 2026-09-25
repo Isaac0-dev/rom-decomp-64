@@ -479,6 +479,13 @@ class Microcode(ABC):
         width = self._SHIFTR(cmd0, 0, 12) + 1
         img = cmd1
         if dis:
+            if fmt > 4:
+                dis.reject_cmd(
+                    "gsDPSetColorImage",
+                    {"fmt": fmt, "siz": siz, "width": width, "image": img},
+                    f"fmt {fmt} outside hardware range 0-4",
+                )
+                return
             dis.set_cmd(
                 "gsDPSetColorImage",
                 {"fmt": fmt, "siz": siz, "width": width, "image": img},

@@ -960,7 +960,9 @@ class ExtractionPipeline:
         for geo_rec in self.db.geos.values():
             text = gp.serialize(geo_rec)
             all_symbols.append(("GeoLayout", geo_rec.name))
-            path = self.txt.get_target_path(geo_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(geo_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 2. Collect Collisions
@@ -968,7 +970,9 @@ class ExtractionPipeline:
         for col_rec in self.db.collisions.values():
             text = cp.serialize(col_rec)
             all_symbols.append(("Collision", col_rec.name))
-            path = self.txt.get_target_path(col_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(col_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 2.1 Collect Rooms
@@ -978,7 +982,9 @@ class ExtractionPipeline:
         for room_rec in self.db.rooms.values():
             text = rp.serialize(room_rec)
             all_symbols.append(("Room", room_rec.name))
-            path = self.txt.get_target_path(room_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(room_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 2.2 Collect Vertices
@@ -988,7 +994,9 @@ class ExtractionPipeline:
         for vtx_rec in self.db.vertices.values():
             text = vp.serialize(vtx_rec)
             all_symbols.append(("Vtx", vtx_rec.name))
-            path = self.txt.get_target_path(vtx_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(vtx_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 2.3 Collect Lights
@@ -998,7 +1006,9 @@ class ExtractionPipeline:
         for light_rec in self.db.lights.values():
             text = lp_light.serialize(light_rec)
             all_symbols.append(("Lights", light_rec.name))
-            path = self.txt.get_target_path(light_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(light_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 3. Collect Display Lists
@@ -1006,7 +1016,9 @@ class ExtractionPipeline:
         for dl_rec in self.db.display_lists.values():
             text = dp.serialize(dl_rec)
             all_symbols.append(("Gfx", dl_rec.name))
-            path = self.txt.get_target_path(dl_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(dl_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 4. Collect Behaviors
@@ -1022,7 +1034,9 @@ class ExtractionPipeline:
         for macro_rec in self.db.macros.values():
             text = mp.serialize(macro_rec)
             all_symbols.append(("MacroObject", macro_rec.name))
-            path = self.txt.get_target_path(macro_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(macro_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 6. Collect Level Scripts
@@ -1030,7 +1044,9 @@ class ExtractionPipeline:
         for script_rec in self.db.level_scripts.values():
             text = lp.serialize(script_rec)
             all_symbols.append(("LevelScript", script_rec.name))
-            path = self.txt.get_target_path(script_rec.name)
+            path = self.txt.get_target_path(
+                self.txt.homed_context(script_rec.name, self.db.record_homes)
+            )
             filepath_to_content[path].append(text)
 
         # 7. Textures (segment-2 global + level textures)
@@ -1043,7 +1059,9 @@ class ExtractionPipeline:
                 all_symbols.append(("Texture", tex_rec.name))
                 # The C struct belongs in model.inc.c (or similar)
                 # We use a suffix to force _get_target_path to return the .c file
-                c_path = self.txt.get_target_path(f"{tex_rec.name}_dl")
+                c_path = self.txt.get_target_path(
+                    self.txt.homed_context(tex_rec.name, self.db.record_homes) + "_dl"
+                )
                 filepath_to_content[c_path].append(text)
 
         from segment2_extractor import get_segment2_processor

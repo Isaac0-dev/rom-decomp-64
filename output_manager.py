@@ -88,6 +88,19 @@ class OutputManager:
         self._file_cache[filepath] = f
         return f
 
+    def homed_context(self, record_name: str, homes) -> str:
+        if not record_name or not homes:
+            return record_name
+        home = homes.get(record_name)
+        if home and not record_name.startswith(home + "_"):
+            return f"{home}_{record_name}"
+        return record_name
+
+    def texture_asset_dir(self, record_name: str, homes) -> str:
+        disp = self.homed_context(record_name, homes)
+        struct_path = self.get_target_path(disp + "_dl")
+        return os.path.dirname(struct_path)
+
     def get_target_path(self, context: str, ctx=None) -> str:
         """
         Determines the relative output path (subfolders + filename) for

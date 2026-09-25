@@ -4,7 +4,6 @@ from utils import (
     debug_fail,
     debug_print,
     level_name_to_int,
-    level_name_to_int_lookup,
     offset_from_segment_addr,
     segment_from_addr,
 )
@@ -191,10 +190,6 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
 
     seg_num = segment_from_addr(addr)
     segment = get_segment(seg_num)
-    if not segment:
-        debug_print(f"WARNING: Segment {seg_num} not loaded for TLUT at 0x{addr:X}")
-        wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
-        return
 
     offset = segmented_to_virtual(addr) if seg_num == 0 else offset_from_segment_addr(addr)
     segment_data = segment
@@ -210,33 +205,38 @@ def load_tlut(sTxt: Any, count: int, tmem_addr: int, tex_info: Optional[TextureI
             )
             segment_data = None
 
-    if segment_data is None:
-        # ROM Fallback
-        phys = tex_info.phys if tex_info.phys != 0 else segmented_to_virtual(addr)
-        if ctx.rom:
-            try:
-                ctx.rom.seek(phys)
-                current_palette = ctx.rom.read(size)
-                if len(current_palette) != size:
-                    current_palette = None
-            except Exception as e:
-                debug_print(f"TLUT ROM fallback failed: {e}")
-                current_palette = None
-
-        if current_palette is None:
-            debug_print(f"WARNING: Segment {seg_num} not loaded for TLUT at 0x{addr:X}")
-            wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
-            return
-    else:
-        if offset + size > len(segment_data):
+    # Resolve the palette bytes
+    # try segment slice first, fallback to direct ROM read.
+    palette_bytes = None
+    if segment_data is not None:
+        if offset + size <= len(segment_data):
+            palette_bytes = segment_data[offset : offset + size]
+        else:
             debug_print(
                 f"WARNING: TLUT data at 0x{addr:08X} exceeds segment bounds (offset: 0x{offset:X}, size: {size}, segment length: {len(segment_data)})"
             )
-            return
-        current_palette = segment_data[offset : offset + size]
+    if palette_bytes is None:
+        phys = tex_info.phys if tex_info.phys != 0 else segmented_to_virtual(addr)
+        if ctx.rom and phys:
+            try:
+                ctx.rom.seek(phys)
+                data = ctx.rom.read(size)
+                if len(data) == size:
+                    palette_bytes = bytes(data)
+                else:
+                    debug_print(
+                        f"TLUT ROM fallback short read for 0x{addr:08X}: got {len(data)}/{size}"
+                    )
+            except Exception as e:
+                debug_print(f"TLUT ROM fallback failed for 0x{addr:08X}: {e}")
+    if palette_bytes is None:
+        debug_print(f"WARNING: Segment {seg_num} not loaded for TLUT at 0x{addr:X}")
+        wait_for_segment_load(load_tlut, addr, (sTxt, count, tmem_addr, tex_info))
+        return
+    current_palette = palette_bytes
 
     # Mark the record as a palette so we don't try to write it as an image
-    phys = segmented_to_virtual(addr)
+    phys = tex_info.phys if tex_info.phys != 0 else segmented_to_virtual(addr)
     name = f"texture_{addr:08X}_{phys:08X}_seg{seg_num}"
     if tex_info.context_prefix:
         name = f"{tex_info.context_prefix}_{name}"
@@ -366,7 +366,12 @@ def _write_png_worker(
         else:
             image_handlers[fmt](w, h, bpp, tex_data, buffer)
 
-        sTxt.write(ctx, "texture", name, buffer)
+        if sTxt is None:
+            debug_print(f"Skipping PNG write for {name}: no output manager.")
+            return
+        homes = getattr(ctx.db, "record_homes", None) if ctx.db is not None else None
+        png_rel = os.path.join(sTxt.texture_asset_dir(name, homes), name + ".png")
+        sTxt.create_file(png_rel, buffer, binary=True)
     except Exception as e:
         debug_fail(f"Error in texture worker for {name}: {e}")
 
@@ -558,7 +563,10 @@ def load_block(
 
     # bits per pixel
     image_size_type_to_bpp = [4, 8, 16, 32]
-    bpp = image_size_type_to_bpp[siz]
+    try:
+        bpp = image_size_type_to_bpp[siz]
+    except (IndexError, KeyError, TypeError):
+        bpp = 16  # Undecodable size, so fallback to 16
 
     texels = lrs + 1
 
@@ -587,6 +595,7 @@ def load_block(
         height=h,
         context_prefix=context_prefix,
     )
+    _snapshot_texture_at_load(sTxt, addr, phys, seg_num, offset, fmt, siz, w, h, context_prefix)
 
 
 def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt: int) -> None:
@@ -620,6 +629,44 @@ def load_tile(sTxt: Any, pos: int, tile: int, uls: int, ult: int, lrs: int, lrt:
         height=h,
         context_prefix=context_prefix,
     )
+    _snapshot_texture_at_load(sTxt, addr, phys, seg_num, offset, fmt, siz, w, h, context_prefix)
+
+
+def _snapshot_texture_at_load(
+    sTxt: Any,
+    addr: int,
+    phys: int,
+    seg_num: int,
+    offset: int,
+    fmt: int,
+    siz: int,
+    w: int,
+    h: int,
+    context_prefix: Optional[str],
+) -> None:
+    if fmt not in (0, 1, 2, 3, 4) or siz not in (0, 1, 2, 3):
+        return
+    if w is None or h is None or w <= 0 or h <= 0 or w > 1024 or h > 1024:
+        return
+    bpp = (4, 8, 16, 32)[siz]
+    segment_data = get_segment(seg_num)
+    if segment_data is not None and phys:
+        if segmented_to_virtual(addr) != phys:
+            segment_data = None
+    name = f"texture_{addr:08X}_{phys:08X}_seg{seg_num}"
+    if context_prefix:
+        name = f"{context_prefix}_{name}"
+    rec = ctx.db.textures.get(name)
+    if rec is None:
+        return
+
+    # Record load time dimensions (a later draw time commit overwrites these)
+    rec.width = w
+    rec.height = h
+    rec.fmt = fmt
+    rec.siz = siz
+    palette = current_palette if fmt == ImageFormat.CI else None
+    write_texture(sTxt, name, fmt, w, h, bpp, offset, seg_num, segment_data, palette, phys)
 
 
 def commit_textures(sTxt: Any, pos: int, tile_indices: List[int]) -> None:
@@ -936,6 +983,18 @@ class TextureProcessor(BaseProcessor):
             return ""
 
         name = record.name
+
+        # PNG is written asynchronously
+        if record.is_palette:
+            if not record.palette_data:
+                debug_print(f"Skipping palette {name}: no palette data.")
+                return ""
+            pal_str = ", ".join(f"0x{b:02X}" for b in record.palette_data)
+            u8_palette = f"ALIGNED8 const u8 {name}[] = {{\n    {pal_str}\n}};\n\n"
+            if self.txt:
+                self.txt.write(ctx, "texture_dl", name.replace("texture", "dl"), u8_palette)
+            return u8_palette
+
         fmt = record.fmt
         w = record.width
         h = record.height
@@ -973,8 +1032,8 @@ class TextureProcessor(BaseProcessor):
             debug_print(f"WARNING: Skipping CI texture {name} at serialize: no palette.")
             return ""
 
-        # If we never snapshotted, try direct ROM read (only for seg0).
-        if not record.segment_data and record.seg_num == 0 and record.phys and ctx.rom:
+        # If we never snapshotted, try a direct ROM read
+        if not record.segment_data and record.phys and ctx.rom:
             required = (w * h * bpp + 7) // 8 if w and h else 0
             if required > 0:
                 try:
@@ -983,37 +1042,26 @@ class TextureProcessor(BaseProcessor):
                     if len(data) == required:
                         record.segment_data = bytes(data)
                         debug_print(
-                            f"serialize seg0 ROM fallback for {name} at phys 0x{record.phys:X} {w}x{h}"
+                            f"serialize ROM fallback for {name} at phys 0x{record.phys:X} {w}x{h}"
                         )
                     else:
                         debug_print(
-                            f"serialize seg0 fallback short read for {name}: "
+                            f"serialize ROM fallback short read for {name}: "
                             f"got {len(data)}/{required}, skipping"
                         )
                 except Exception as e:
-                    debug_print(f"serialize seg0 fallback failed for {name}: {e}")
+                    debug_print(f"serialize ROM fallback failed for {name}: {e}")
 
-        # Level-specific path prefix for DynOS
+        # Find out what the include path should be for the texture
         path = ""
-        for level in level_name_to_int_lookup:
-            if name.startswith(level + "_") or name == level:
-                path = f"{level}/"
-                if "_area_" in name:
-                    area_num_str = name.split("_area_")[1].split("_")[0]
-                    if area_num_str.isdigit():
-                        path += f"areas/{area_num_str}/"
-                break
+        if self.txt is not None:
+            homes = getattr(ctx.db, "record_homes", None) if ctx.db is not None else None
+            asset_dir = self.txt.texture_asset_dir(name, homes)
+            parts = asset_dir.split(os.sep)
+            if len(parts) >= 2 and parts[0] == "levels":
+                path = "/".join(parts[1:]) + "/"
 
         # PNG is written asynchronously
-        if record.is_palette:
-            pal_str = ""
-            if record.palette_data:
-                pal_str = ", ".join(f"0x{b:02X}" for b in record.palette_data)
-            u8_palette = f"ALIGNED8 const u8 {name}[] = {{\n    {pal_str}\n}};\n\n"
-            if self.txt:
-                self.txt.write(ctx, "texture_dl", name.replace("texture", "dl"), u8_palette)
-            return u8_palette
-
         if record.segment_data:
             self.submitted_count += 1
             future = executor.submit(
@@ -1034,8 +1082,7 @@ class TextureProcessor(BaseProcessor):
                 self.txt.register_future(future)
         else:
             self.skipped_count += 1
-            if not record.is_palette:
-                debug_print(f"Texture {name} has no segment_data, skipping PNG write.")
+            debug_print(f"Texture {name} has no segment_data, skipping PNG write.")
 
         if record.skip_definition_write:
             return ""
