@@ -88,6 +88,24 @@ class LightProcessor(BaseProcessor):
         segment_data = CustomBytesIO(data)
         segment_data.seek(offset)
 
+        # Fall back by reading from direct ROM to avoid truncated data
+        read_len = 8 if is_ambient else (24 if is_lights1 else (40 if is_lights2 else 16))
+        if len(data) - offset < read_len:
+            phys = segmented_to_virtual(segmented_addr)
+            raw = b""
+            if ctx.rom is not None:
+                try:
+                    ctx.rom.seek(phys)
+                    raw = ctx.rom.read(read_len)
+                except Exception as e:
+                    debug_print(f"Light ROM fallback failed for 0x{segmented_addr:08X}: {e}")
+            if len(raw) == read_len:
+                debug_print(
+                    f"Light ROM fallback filled 0x{segmented_addr:08X} from phys 0x{phys:X}"
+                )
+                segment_data = CustomBytesIO(bytes(raw))
+                segment_data.seek(0)
+
         output_lines: List[str] = []
 
         try:

@@ -9,6 +9,7 @@ import bps
 # Optional for downloading hacks
 from urllib.parse import urljoin
 from typing import Any as _Any, cast as _cast
+
 try:
     import importlib
 
@@ -246,7 +247,9 @@ def download_and_patch(url):
     if "versions" in selected_hack and selected_hack["versions"]:
         latest_version = selected_hack["versions"][-1]
         if "download" in latest_version and "directHref" in latest_version["download"]:
-            download_url = urljoin("https://api.romhacking.com/", latest_version["download"]["directHref"])
+            download_url = urljoin(
+                "https://api.romhacking.com/", latest_version["download"]["directHref"]
+            )
 
     if not download_url:
         debug_fail(f"Error: Could not find a direct download URL for hack '{slug}'")
