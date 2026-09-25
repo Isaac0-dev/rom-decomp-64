@@ -1138,6 +1138,20 @@ class ExtractionPipeline:
         from text_export import wait_for_text_export
 
         wait_for_text_export()
+
+        region_map = ctx.region_map
+        if region_map.conflict_count:
+            print(
+                f"Region map: {region_map.conflict_count} conflicting claim(s) "
+                f"({sum(1 for c in region_map.claims if c.conflicted)} marked). "
+                f"First few:"
+            )
+            shown = 0
+            for c in region_map.claims:
+                if c.conflicted and shown < 10:
+                    print(f"  CONFLICT: {c.describe()}")
+                    shown += 1
+
         self.txt.close()
         ctx.reached_end = True
 

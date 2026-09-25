@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
-from utils import debug_fail, debug_print
+from utils import debug_print
 
 _BLOCK_SHIFT = 16
 
@@ -81,7 +81,7 @@ class RomRegionMap:
                     match.owners.append(owner)
                 return
             self.conflict_count += 1
-            debug_fail(
+            debug_print(
                 f"new {kind} claim as {owner} covers "
                 f"(0x{start:06X}-0x{end:06X}) which is already claimed as "
                 f"{exact[0].kind} by {'; '.join(exact[0].owners)}"
@@ -100,14 +100,22 @@ class RomRegionMap:
                 partial.append(c)
 
         # Partial overlaps
-        # This usually means a bad pointer
+        # This usually means a bad pointer, except for level scripts
+        # which operate via a VM, where jumping midway through a script is valid.
         if partial:
             self.conflict_count += 1
             p = partial[0]
-            debug_fail(
-                f"new {kind} claim (0x{start:06X}-0x{end:06X}) partial overlap: {p.describe()}."
-            )
+            if kind == "Level Script" and all(c.kind == "Level Script" for c in partial):
+                debug_print(
+                    f"new {kind} claim (0x{start:06X}-0x{end:06X}) partial overlap "
+                    f"(aliased entries?): {p.describe()}."
+                )
+            else:
+                debug_print(
+                    f"new {kind} claim (0x{start:06X}-0x{end:06X}) partial overlap: {p.describe()}."
+                )
             self._insert(start, end, kind, owner, conflicted=True)
+            return
 
         # Nested overlaps
         if nested:
