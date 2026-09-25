@@ -196,7 +196,6 @@ class StarEntry:
     offsets: tuple[int, ...]
     fmt: str = ">fff"
     editor_offset: int | None = None
-    sentinel_check: bool = True
 
     def read(self, rom_bytes: memoryview, use_editor: bool):
         rom_len = len(rom_bytes)
@@ -218,15 +217,6 @@ class StarEntry:
         fmt_size = struct.calcsize(self.fmt)
         if offset < 0 or offset + fmt_size > rom_len:
             return None
-
-        if self.sentinel_check:
-            if offset + 4 > rom_len:
-                return None
-            marker = struct.unpack_from(">L", rom_bytes, offset)[0]
-            if marker == 0x01010101:
-                return None
-            if marker in (0x00000000, 0xFFFFFFFF):
-                return None
 
         coords = struct.unpack_from(self.fmt, rom_bytes, offset)
 
@@ -251,12 +241,10 @@ STAR_SCHEMA: dict[str, StarEntry] = {
     "KoopaBobStarPos": StarEntry(
         offsets=(0xED868, 0xED86A, 0xED86C),
         fmt=">h",
-        sentinel_check=False,
     ),
     "KoopaThiStarPos": StarEntry(
         offsets=(0xED878, 0xED87A, 0xED87C),
         fmt=">h",
-        sentinel_check=False,
     ),
     # Standard boss / event stars
     "KingBobombStarPos": StarEntry((0x1204F00,)),
