@@ -58,6 +58,24 @@ class VertexProcessor(BaseProcessor):
         segment_data.seek(offset)
 
         total_bytes = count * 16
+
+        # Fall back by reading from direct ROM to avoid truncated data
+        if total_bytes > 0 and len(data) - offset < total_bytes:
+            phys = segmented_to_virtual(segmented_addr)
+            raw = b""
+            if ctx.rom is not None:
+                try:
+                    ctx.rom.seek(phys)
+                    raw = ctx.rom.read(total_bytes)
+                except Exception as e:
+                    debug_print(f"Vertex ROM fallback failed for 0x{segmented_addr:08X}: {e}")
+            if len(raw) == total_bytes:
+                debug_print(
+                    f"Vertex ROM fallback filled 0x{segmented_addr:08X} from phys 0x{phys:X}"
+                )
+                segment_data = CustomBytesIO(bytes(raw))
+                segment_data.seek(0)
+
         vtx_data_block = segment_data.read(total_bytes)
         actual_count = len(vtx_data_block) // 16
 
