@@ -34,8 +34,8 @@ VANILLA_TRAJECTORIES: List[Tuple[int, str, str, int]] = [
     (0x07011530, "bob_seg7_metal_ball_path0", "BowlingBallBobTrajectory", 13),
     (0x070115C4, "bob_seg7_metal_ball_path1", "BowlingBallBob2Trajectory", 15),
     (0x070170A0, "ttm_seg7_trajectory_070170A0", "BowlingBallTtmTrajectory", 14),
-    (0xED6C4, "sThiHugeMetalBallTraj", "BowlingBallThiLargeTrajectory", 16),
-    (0xED718, "sThiTinyMetalBallTraj", "BowlingBallThiSmallTrajectory", 17),
+    (0x000ED6C4, "sThiHugeMetalBallTraj", "BowlingBallThiLargeTrajectory", 16),
+    (0x000ED718, "sThiTinyMetalBallTraj", "BowlingBallThiSmallTrajectory", 17),
     (0x0700E258, "thi_seg7_trajectory_koopa", "KoopaThiTrajectory", 1),
     (0x07023604, "ccm_seg7_trajectory_penguin_race", "RacingPenguinTrajectory", 2),
     (0x0700D20C, "jrb_seg7_trajectory_unagi_1", "UnagiTrajectory", -1),
@@ -54,7 +54,7 @@ VANILLA_TRAJECTORIES: List[Tuple[int, str, str, int]] = [
 
 VANILLA_TRAJECTORY_NAMES: Dict[int, str] = {entry[0]: entry[1] for entry in VANILLA_TRAJECTORIES}
 VANILLA_TRAJECTORY_TO_COOP_NAME: Dict[str, str] = {
-    entry[2]: entry[1] for entry in VANILLA_TRAJECTORIES
+    entry[1]: entry[2] for entry in VANILLA_TRAJECTORIES
 }
 VANILLA_TRAJECTORY_FROM_EDITOR_IDX: Dict[int, Tuple[int, str, str, int]] = {
     entry[3]: entry for entry in VANILLA_TRAJECTORIES
@@ -147,11 +147,11 @@ def parse_trajectory(
     if override_name is None:
         override_name = VANILLA_TRAJECTORY_TO_COOP_NAME.get(name)
     if override_name is None:
-        override_name = "KoopaBobTrajectory"
-    if override_name is not None:
-        trajectory_string += (
-            f'gBehaviorValues.trajectories.{override_name} = get_trajectory("{name}")\n'
-        )
+        debug_print(f"Warning: No override name for trajectory {name} at 0x{segmented_addr:08X}")
+
+    trajectory_string += (
+        f'gBehaviorValues.trajectories.{override_name} = get_trajectory("{name}")\n'
+    )
     return name
 
 
