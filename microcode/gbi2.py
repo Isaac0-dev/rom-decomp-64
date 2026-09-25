@@ -172,7 +172,7 @@ class GBI2(GBI1):
 
     def execute_end_dl(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsSPEndDisplayList", {"end": True})
+            dis.set_cmd("gsSPEndDisplayList", {})
             dis.end_dl = True
 
     def execute_set_other_mode_l(self, cmd0, cmd1, dis):
@@ -352,11 +352,11 @@ class GBI2(GBI1):
 
     def execute_rdp_half_1(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPHalf1", {})
+            dis.set_cmd("gsDPHalf1", {}, commented_out=True)
 
     def execute_rdp_half_2(self, cmd0, cmd1, dis):
         if dis:
-            dis.set_cmd("gsDPHalf2", {})
+            dis.set_cmd("gsDPHalf2", {}, commented_out=True)
 
     def execute_load_ucode(self, cmd0, cmd1, dis):
         if dis:
